@@ -527,6 +527,29 @@ function convForm(x){
   ], onSave: v => { if (!v.club) { toast('Poné el nombre del club.'); return; } dbSave('conv', isNew ? null : x.id, Object.assign({}, x, v, {dep:x.dep || convDep, id:undefined})); },
      onDelete: isNew ? null : () => dbDel('conv', x.id)});
 }
+/* Categorías URBA 2026 según el reglamento oficial (CAMPEONATO-2026-FINAL.pdf). Hindú queda fuera: es el anfitrión. */
+const URBA_2026 = [
+  ...[['Newman'],['SIC'],['CASI'],['Belgrano'],['Los Tilos'],['Regatas'],['Alumni'],['CUBA'],['La Plata'],['Buenos Aires','BIEI','BACRC'],['Los Matreros'],['Atlético del Rosario'],['Champagnat']].map(a => ({club:a[0], al:a.slice(1), zona:'T14', prov:''})),
+  ...[['San Luis'],['Pueyrredón'],['San Cirano','Círculo','Cirulo'],['Pucará'],['Hurling'],['Curupaytí'],['San Andrés'],['Lomas'],['Deportiva Francesa'],['Olivos'],['Universitario (LP)'],['San Albano'],['GEBA'],['San Fernando']].map(a => ({club:a[0], al:a.slice(1), zona:'1A', prov:''})),
+  ...[['C.U. de Quilmes'],['Liceo Naval'],['San Martín'],['San Patricio'],['Mariano Moreno'],['Delta'],['Argentino de Rugby'],['Don Bosco'],['Banco Nación'],['Manuel Belgrano'],['Italiano'],['Vicentinos'],['Monte Grande'],['Liceo Militar']].map(a => ({club:a[0], al:a.slice(1), zona:'URBA resto', prov:'Primera B'})),
+  ...[['Luján'],['San Carlos'],['Centro Naval'],['Sitas'],['Lanús'],['DAOM'],['Areco'],['Ciudad de Buenos Aires'],['Virreyes'],["St. Brendan's"],['Casa de Padua'],['Del Sur'],['Los Molinos'],['San Miguel']].map(a => ({club:a[0], al:a.slice(1), zona:'URBA resto', prov:'Primera C'}))
+];
+const URBA_Z = ['T14', '1A', 'URBA resto'];
+async function fixUrba2026(){
+  try {
+    const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:'convfix_urba2026', data:{at:new Date().toISOString()}}); if (e0) return;
+    const pool = A.conv.filter(x => URBA_Z.includes(x.zona)); const used = new Set(); const rows = [];
+    URBA_2026.forEach((u, i) => {
+      const keys = [u.club].concat(u.al).map(norm);
+      const hit = pool.find(x => !used.has(x.id) && keys.includes(norm(x.club)));
+      if (hit) { used.add(hit.id); const d = Object.assign({}, hit, {club:u.club, zona:u.zona, prov:u.prov}); delete d.id; rows.push({col:COL.conv, id:hit.id, data:d}); }
+      else rows.push({col:COL.conv, id:'u26-' + i, data:{club:u.club, zona:u.zona, prov:u.prov, cont:false, estado:'Pendiente', com:'', integ:null, aloj:'No', resp:'', tel:'', dep:'rugby'}});
+    });
+    pool.filter(x => !used.has(x.id)).forEach(x => { const d = Object.assign({}, x, {zona:'URBA resto', prov:'Otra categoría (revisar)'}); delete d.id; rows.push({col:COL.conv, id:x.id, data:d}); });
+    const {error} = await sb.from('adm_docs').upsert(rows); if (error) throw error;
+    toast('Convocatoria: categorías URBA 2026 actualizadas'); await loadAdmin();
+  } catch (e) {}
+}
 async function seedConv(){
   toast('Cargando clubes…');
   try {
@@ -892,6 +915,7 @@ async function loadAdmin(){
   A.cfg = Object.assign({capacidad:0, precioEntrada:0, precioInsc:0}, adm.config || {});
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
+  if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
 }
 async function loadState(){
   if (!sb) return;
