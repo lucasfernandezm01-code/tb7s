@@ -848,18 +848,36 @@ function loginForm(){
   if (!sb) { toast('Falta conectar la base de datos.'); return; }
   openForm({title:'Acceso organización', saveLabel:'Ingresar', fields:[
     {k:'email', label:'Mail', type:'email', value:''}, {k:'pass', label:'Contraseña', type:'password', value:''},
-    {k:'nuevo', label:'Es mi primera vez: crear cuenta', type:'toggle', value:false}
+    {k:'nuevo', label:'Es mi primera vez: crear cuenta', type:'toggle', value:false},
+    {k:'olvido', label:'Olvidé mi contraseña (te mando un mail)', type:'toggle', value:false}
   ], onSave: async v => {
+    const SITE = location.origin + location.pathname;
+    if (v.olvido) {
+      if (!v.email) { toast('Poné tu mail.'); return; }
+      const {error} = await sb.auth.resetPasswordForEmail(v.email, {redirectTo:SITE});
+      if (error) { toast('No se pudo mandar el mail: ' + error.message); return; }
+      closeSheet(); toast('Te mandamos un mail para elegir una contraseña nueva.'); return;
+    }
     if (!v.email || !v.pass) { toast('Completá mail y contraseña.'); return; }
     if (v.nuevo) {
       const {error} = await sb.auth.signUp({email:v.email, password:v.pass, options:{emailRedirectTo:location.origin + location.pathname}});
-      if (error) { toast(error.message.includes('Password') ? 'La contraseña tiene que tener al menos 6 caracteres.' : 'No se pudo crear la cuenta.'); return; }
+      if (error) { toast(/password/i.test(error.message) ? 'La contraseña tiene que tener al menos 6 caracteres.' : /registered|exists/i.test(error.message) ? 'Ese mail ya tiene cuenta. Ingresá o usá "Olvidé mi contraseña".' : 'No se pudo crear la cuenta: ' + error.message); return; }
       closeSheet(); toast('Te mandamos un mail para confirmar la cuenta.'); return;
     }
     const {error} = await sb.auth.signInWithPassword({email:v.email, password:v.pass});
-    if (error) { toast(/confirm/i.test(error.message) ? 'Confirmá tu mail antes de ingresar.' : 'Mail o contraseña incorrectos.'); return; }
+    if (error) { toast(/confirm/i.test(error.message) ? 'Tu mail todavía no está confirmado. Revisá tu casilla.' : /invalid/i.test(error.message) ? 'Mail o contraseña incorrectos. Probá con "Olvidé mi contraseña".' : 'No se pudo ingresar: ' + error.message); return; }
     closeSheet();
   }});
+}
+function newPassForm(){
+  openForm({title:'Contraseña nueva', saveLabel:'Guardar', fields:[{k:'p1', label:'Contraseña nueva (mínimo 6)', type:'password', value:''}, {k:'p2', label:'Repetila', type:'password', value:''}],
+    onSave: async v => {
+      if (!v.p1 || v.p1.length < 6) { toast('Mínimo 6 caracteres.'); return; }
+      if (v.p1 !== v.p2) { toast('Las contraseñas no coinciden.'); return; }
+      const {error} = await sb.auth.updateUser({password:v.p1});
+      if (error) { toast('No se pudo cambiar: ' + error.message); return; }
+      closeSheet(); toast('Contraseña actualizada. Ya estás adentro.');
+    }});
 }
 function accessForm(){
   openForm({title:'Accesos al Admin', saveLabel:'Guardar', fields:[{k:'txt', label:'Un mail por línea. Cada persona crea su cuenta con ese mail.', type:'textarea', value:admins.join('\n')}],
@@ -879,7 +897,8 @@ render();
   if (!sb) return;
   await loadState();
   const {data:{session}} = await sb.auth.getSession(); me = session ? session.user : null; await checkAdmin();
-  sb.auth.onAuthStateChange((ev, session) => { const was = me && me.id; me = session ? session.user : null; if ((me && me.id) !== was) checkAdmin(); });
+  sb.auth.onAuthStateChange((ev, session) => {
+    if (ev === 'PASSWORD_RECOVERY') setTimeout(newPassForm, 300); const was = me && me.id; me = session ? session.user : null; if ((me && me.id) !== was) checkAdmin(); });
   sb.channel('tb_state').on('postgres_changes', {event:'*', schema:'public', table:'tb_state'}, p => { if (p.new && p.new.data) { hasRow = true; setBase(p.new.data); } }).subscribe();
   setInterval(loadState, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadState(); if (isAdmin) loadAdmin(); } });
