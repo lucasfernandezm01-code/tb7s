@@ -927,10 +927,15 @@ async function loadAdmin(){
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
   else if (A.conv.length && !adm.convfix_2) fixConv2();
 }
+let lastUpd = null;
 async function loadState(){
   if (!sb) return;
-  const {data} = await sb.from('tb_state').select('data').eq('id', 1).maybeSingle();
-  if (data && data.data) { hasRow = true; if (JSON.stringify(data.data) !== JSON.stringify(BASE)) setBase(data.data); }
+  if (lastUpd) {
+    const r = await sb.from('tb_state').select('updated_at').eq('id', 1).maybeSingle();
+    if (r.data && r.data.updated_at === lastUpd) return;
+  }
+  const {data} = await sb.from('tb_state').select('data,updated_at').eq('id', 1).maybeSingle();
+  if (data && data.data) { hasRow = true; lastUpd = data.updated_at; if (JSON.stringify(data.data) !== JSON.stringify(BASE)) setBase(data.data); }
 }
 async function checkAdmin(){
   isAdmin = false;
@@ -996,7 +1001,7 @@ render();
   if (RECOVERY && me && !recoveryShown) { recoveryShown = true; newPassForm(); }
   sb.auth.onAuthStateChange((ev, session) => {
     const was = me && me.id; me = session ? session.user : null; if ((me && me.id) !== was) checkAdmin(); });
-  sb.channel('tb_state').on('postgres_changes', {event:'*', schema:'public', table:'tb_state'}, p => { if (p.new && p.new.data) { hasRow = true; setBase(p.new.data); } }).subscribe();
+  sb.channel('tb_state').on('postgres_changes', {event:'*', schema:'public', table:'tb_state'}, p => { if (p.new && p.new.data) { hasRow = true; lastUpd = p.new.updated_at; setBase(p.new.data); } }).subscribe();
   setInterval(loadState, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadState(); if (isAdmin) loadAdmin(); } });
 })();

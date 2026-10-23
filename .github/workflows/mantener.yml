@@ -1,0 +1,18 @@
+name: Mantener base activa
+# Supabase gratis pausa el proyecto tras una semana sin uso. Esto lo consulta una vez por día.
+on:
+  schedule:
+    - cron: "17 12 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          URL=$(grep -o "const SB_URL = '[^']*'" index.html | cut -d"'" -f2)
+          KEY=$(grep -o "const SB_KEY = '[^']*'" index.html | cut -d"'" -f2)
+          curl -sf "$URL/rest/v1/tb_state?select=updated_at" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" > /dev/null && echo ok
