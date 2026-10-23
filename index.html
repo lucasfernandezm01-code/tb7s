@@ -858,13 +858,13 @@ function loginForm(){
     if (v.olvido) {
       if (!v.email) { toast('Poné tu mail.'); return; }
       const {error} = await sb.auth.resetPasswordForEmail(v.email, {redirectTo:SITE});
-      if (error) { toast('No se pudo mandar el mail: ' + error.message); return; }
+      if (error) { toast(/rate limit/i.test(error.message) ? 'Ahora no se pueden mandar más mails. Probá en una hora o pedile a Lucas que te cambie la contraseña.' : 'No se pudo mandar el mail: ' + error.message); return; }
       closeSheet(); toast('Te mandamos un mail para elegir una contraseña nueva.'); return;
     }
     if (!v.email || !v.pass) { toast('Completá mail y contraseña.'); return; }
     if (v.nuevo) {
       const {error} = await sb.auth.signUp({email:v.email, password:v.pass, options:{emailRedirectTo:location.origin + location.pathname}});
-      if (error) { toast(/password/i.test(error.message) ? 'La contraseña tiene que tener al menos 6 caracteres.' : /registered|exists/i.test(error.message) ? 'Ese mail ya tiene cuenta. Ingresá o usá "Olvidé mi contraseña".' : 'No se pudo crear la cuenta: ' + error.message); return; }
+      if (error) { toast(/password/i.test(error.message) ? 'La contraseña tiene que tener al menos 6 caracteres.' : /registered|exists/i.test(error.message) ? 'Ese mail ya tiene cuenta. Ingresá o usá "Olvidé mi contraseña".' : /rate limit/i.test(error.message) ? 'Ahora no se pueden mandar más mails de confirmación. Pedile a Lucas que te cree la cuenta.' : 'No se pudo crear la cuenta: ' + error.message); return; }
       closeSheet(); toast('Te mandamos un mail para confirmar la cuenta.'); return;
     }
     const {error} = await sb.auth.signInWithPassword({email:v.email, password:v.pass});
