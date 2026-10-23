@@ -550,6 +550,15 @@ async function fixUrba2026(){
     toast('Convocatoria: categorías URBA 2026 actualizadas'); await loadAdmin();
   } catch (e) {}
 }
+async function fixConv2(){
+  try {
+    const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:'convfix_2', data:{at:new Date().toISOString()}}); if (e0) return;
+    for (const x of A.conv.filter(x => norm(x.club) === 'plaza')) await sb.from('adm_docs').delete().eq('col', COL.conv).eq('id', x.id);
+    const rows = A.conv.filter(x => norm(x.club) === 'mercedes').map(x => { const d = Object.assign({}, x, {zona:'URBA resto', prov:'Segunda'}); delete d.id; return {col:COL.conv, id:x.id, data:d}; });
+    if (rows.length) await sb.from('adm_docs').upsert(rows);
+    await loadAdmin();
+  } catch (e) {}
+}
 async function seedConv(){
   toast('Cargando clubes…');
   try {
@@ -916,6 +925,7 @@ async function loadAdmin(){
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
+  else if (A.conv.length && !adm.convfix_2) fixConv2();
 }
 async function loadState(){
   if (!sb) return;
