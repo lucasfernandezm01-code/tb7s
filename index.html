@@ -111,7 +111,7 @@ th,td{padding:8px 6px;text-align:center;white-space:nowrap}
 th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line)}
 td{border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:0}
-td.team,th.team{text-align:left;width:100%;max-width:150px;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+td.team,th.team{text-align:left;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 td.pos{width:26px;color:var(--muted);font-weight:700;position:relative}
 tr.q td.pos{color:var(--sea)}
 tr.q td.pos::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:3px;border-radius:2px;background:var(--sea)}
@@ -119,6 +119,35 @@ td.pts{font-family:var(--display);font-weight:800;font-size:15px}
 .grp-head{display:flex;justify-content:space-between;align-items:baseline;padding:10px 12px 0}
 .grp-head b{font-family:var(--display);font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.04em}
 .legend{font-size:12px;color:var(--muted)}
+
+/* standings fit on phones */
+.tbl-wrap table{table-layout:fixed}
+.tbl-wrap col.c-pos{width:30px} .tbl-wrap col.c-n{width:30px} .tbl-wrap col.c-d{width:38px} .tbl-wrap col.c-p{width:38px} .tbl-wrap col.c-x{width:36px}
+td.team{overflow:hidden;text-overflow:ellipsis}
+
+/* fixture subtabs */
+.subtabs{background:var(--surface);border:1px solid var(--line)}
+.subtabs button{display:flex;align-items:center;justify-content:center;gap:6px}
+.seg.subtabs button[aria-pressed="true"]{background:var(--navy);color:var(--gold);box-shadow:none}
+.subtabs .cnt{font-size:12px;opacity:.75}
+.dotlive{width:7px;height:7px;border-radius:50%;background:var(--live);animation:pulse 1.2s infinite}
+/* team matches in table */
+tr.trow{cursor:pointer}
+tr.trow:hover td,tr.trow.open td{background:var(--sea-soft)}
+tr.trow.open td{border-bottom:0}
+.chev{margin-left:6px;font-size:10px;color:var(--muted)}
+tr.tm-row td{padding:0 10px 10px;background:var(--sea-soft);white-space:normal;text-align:left}
+.tm{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px 10px}
+.tm-t{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:8px 0 2px}
+.tm-l{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.tm-t + .tm-l{border-top:0}
+.tm-o{min-width:0;font-weight:600;display:block}
+.tm-o .ph{color:var(--muted);font-style:italic;font-weight:500}
+.tm-o small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
+.tm-l b{font-family:var(--display);font-weight:800;font-size:15px}
+.tm-r{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:800;color:#fff}
+.tm-r.w{background:var(--good)} .tm-r.l{background:var(--bad)} .tm-r.d{background:var(--muted)} .tm-r.live{background:var(--live);font-size:10px}
+.tm-h{font-size:12px;font-weight:700;color:var(--muted);min-width:26px}
 
 /* agenda */
 .agenda{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -307,7 +336,7 @@ const UI = store.get('tb7s-ui') || {};
 let tab = ['fixture','tabla','agenda','mapa','admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) : (UI.tab || 'fixture');
 let comp = UI.comp || 'all';
 let adminTab = UI.adminTab || 'resumen';
-let editMode = false, isAdmin = false, mapSel = null, placing = false;
+let editMode = false, isAdmin = false, mapSel = null, placing = false, fixSel = null, teamSel = null;
 const saveUI = () => store.set('tb7s-ui', {tab, comp, adminTab});
 
 /* ---------- standings ---------- */
@@ -382,12 +411,29 @@ function matchCard(m){
 function viewFixture(){
   const ms = S.partidos.filter(m => comp === 'all' || m.c === comp).sort((a,b) => a.h.localeCompare(b.h) || a.k.localeCompare(b.k));
   const live = ms.filter(m => m.e === 'jugando'), next = ms.filter(m => m.e === 'prog'), done = ms.filter(m => m.e === 'final');
-  const block = (t, arr, note) => arr.length ? `<section class="stack"><h2 class="sec-title">${t}<small>${note || arr.length + ' partidos'}</small></h2>${arr.map(matchCard).join('')}</section>` : '';
+  const sel = fixSel || (live.length ? 'live' : next.length ? 'next' : 'done');
+  const opts = [['live','En juego',live],['next','Próximos',next],['done','Finalizados',done]];
+  const arr = sel === 'live' ? live : sel === 'next' ? next : done.slice().reverse();
+  const emptyMsg = {live:'No hay partidos en juego ahora.', next:'No quedan partidos por jugar.', done:'Todavía no terminó ningún partido.'}[sel];
   return `${editMode ? `<div class="toolbar"><button class="btn primary" data-act="newmatch">+ Agregar partido</button><span class="muted" style="align-self:center;font-size:13px">Tocá un partido para cargar el resultado</span></div>` : ''}
-    ${block('En juego', live)}${block('Próximos', next)}${block('Finalizados', done)}
-    ${ms.length ? '' : '<div class="empty">Todavía no hay partidos cargados para esta competencia.</div>'}`;
+    <div class="seg subtabs" role="group" aria-label="Estado de los partidos">${opts.map(([k, l, a]) => `<button data-act="fixsel" data-id="${k}" aria-pressed="${sel === k}">${k === 'live' && a.length ? '<span class="dotlive"></span>' : ''}${l} <span class="cnt num">${a.length}</span></button>`).join('')}</div>
+    ${ms.length ? (arr.length ? `<section class="stack">${arr.map(matchCard).join('')}</section>` : `<div class="empty">${emptyMsg}</div>`) : '<div class="empty">Todavía no hay partidos cargados para esta competencia.</div>'}`;
+}
+function teamMatches(c, team){
+  const ms = S.partidos.filter(m => m.c === c.id).map(m => ({m, L:resolveName(m.c, m.l).n, V:resolveName(m.c, m.v).n})).filter(x => x.L === team || x.V === team)
+    .sort((a, b) => a.m.h.localeCompare(b.m.h));
+  const line = x => { const m = x.m, home = x.L === team, opp = home ? x.V : x.L, my = home ? m.gl : m.gv, ot = home ? m.gv : m.gl;
+    const has = m.gl != null && m.gv != null && m.e !== 'prog';
+    const res = m.e === 'final' && has ? (my > ot ? ['w','G'] : my < ot ? ['l','P'] : ['d','E']) : null;
+    const ph = resolveName(c.id, opp).ph;
+    return `<div class="tm-l">${res ? `<span class="tm-r ${res[0]}">${res[1]}</span>` : m.e === 'jugando' ? '<span class="tm-r live">EN</span>' : `<span class="tm-h num">${esc(m.h)}</span>`}
+      <span class="tm-o">vs ${ph ? '' : crest(opp)}<span${ph ? ' class="ph"' : ''}>${esc(opp)}</span><small>${esc(m.f)} · ${esc(m.k)}${res || m.e === 'jugando' ? ' · ' + esc(m.h) : ''}</small></span>
+      ${has ? `<b class="num">${my}-${ot}</b>` : '<span></span>'}</div>`; };
+  const played = ms.filter(x => x.m.e === 'final'), rest = ms.filter(x => x.m.e !== 'final');
+  return `<div class="tm">${played.length ? `<div class="tm-t">Jugados</div>${played.map(line).join('')}` : ''}${rest.length ? `<div class="tm-t">Próximos</div>${rest.map(line).join('')}` : ''}${ms.length ? '' : '<div class="muted" style="padding:6px 0">Sin partidos cargados.</div>'}</div>`;
 }
 function viewTabla(){
+  const W = window.matchMedia('(min-width:521px)').matches;
   const cs = comp === 'all' ? S.comps : S.comps.filter(c => c.id === comp);
   return cs.map(c => `<section class="stack">
     <h2 class="sec-title">${esc(c.nombre)}<small>G ${c.pts.g} · E ${c.pts.e} · P ${c.pts.p} pts</small></h2>
@@ -395,10 +441,11 @@ function viewTabla(){
     ${c.grupos.length ? c.grupos.map(g => {
       const rows = standings(c, g);
       return `<div class="tbl-wrap"><div class="grp-head"><b>Grupo ${esc(g.id)}</b>${groupDone(c, g.id) ? '<span class="tag fin">Cerrado</span>' : ''}</div>
-      <table><thead><tr><th></th><th class="team">Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th><th title="A favor">AF</th><th title="En contra">EC</th><th>Dif</th><th>Pts</th></tr></thead>
-      <tbody>${rows.map((r, i) => `<tr class="${i < 2 ? 'q' : ''}"><td class="pos">${i + 1}</td><td class="team">${crest(r.t)}${esc(r.t)}</td><td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td><td>${r.pf}</td><td>${r.pc}</td><td>${r.pf - r.pc > 0 ? '+' : ''}${r.pf - r.pc}</td><td class="pts">${r.pts}</td></tr>`).join('')}</tbody></table></div>`;
+      <table><colgroup><col class="c-pos"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n">${W ? '<col class="c-x"><col class="c-x">' : ''}<col class="c-d"><col class="c-p"></colgroup><thead><tr><th></th><th class="team">Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th>${W ? '<th title="A favor">AF</th><th title="En contra">EC</th>' : ''}<th>Dif</th><th>Pts</th></tr></thead>
+      <tbody>${rows.map((r, i) => { const key = c.id + '|' + r.t, open = teamSel === key;
+        return `<tr class="trow${i < 2 ? ' q' : ''}${open ? ' open' : ''}" data-act="team" data-id="${esc(key)}" tabindex="0" aria-expanded="${open}"><td class="pos">${i + 1}</td><td class="team">${crest(r.t)}${esc(r.t)}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></td><td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>${W ? `<td>${r.pf}</td><td>${r.pc}</td>` : ''}<td>${r.pf - r.pc > 0 ? '+' : ''}${r.pf - r.pc}</td><td class="pts">${r.pts}</td></tr>${open ? `<tr class="tm-row"><td colspan="${W ? 10 : 8}">${teamMatches(c, r.t)}</td></tr>` : ''}`; }).join('')}</tbody></table></div>`;
     }).join('') : '<div class="empty">Sin grupos cargados.</div>'}
-  </section>`).join('') + `<p class="legend">Los dos primeros de cada grupo pasan a playoffs. Desempate: puntos, diferencia de ${'tantos/goles'}, a favor.</p>`;
+  </section>`).join('') + `<p class="legend">Tocá un equipo para ver sus partidos. Los dos primeros de cada grupo pasan a playoffs. Desempate: puntos, diferencia de ${'tantos/goles'}, a favor.</p>`;
 }
 function viewAgenda(){
   const it = S.itinerario.slice().sort((a,b) => a.h.localeCompare(b.h));
@@ -835,7 +882,9 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === 'tab') { tab = id; editMode = editMode && tab !== 'admin'; saveUI(); render(); window.scrollTo(0, 0); }
-  else if (a === 'comp') { comp = id; saveUI(); render(); }
+  else if (a === 'comp') { comp = id; fixSel = null; teamSel = null; saveUI(); render(); }
+  else if (a === 'fixsel') { fixSel = id; render(); }
+  else if (a === 'team') { teamSel = teamSel === id ? null : id; render(); }
   else if (a === 'edit') { editMode = !editMode; placing = false; render(); }
   else if (a === 'close') closeSheet();
   else if (a === 'score') openScore(id);
@@ -905,7 +954,7 @@ document.addEventListener('pointerup', () => {
 });
 document.addEventListener('pointercancel', () => { drag = null; });
 document.addEventListener('submit', e => { if (e.target.id === 'frm' && formCtx) { e.preventDefault(); formCtx.onSave(readForm()); } });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr.trow')) { e.preventDefault(); e.target.click(); } });
 
 /* ---------- supabase: public state, auth, admin data ---------- */
 let me = null, admins = [];
@@ -1016,6 +1065,7 @@ render();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadState(); if (isAdmin) loadAdmin(); } });
 })();
 setInterval(() => { if (tab === 'agenda' && sheet.hidden) render(); }, 60000);
+try { window.matchMedia('(min-width:521px)').addEventListener('change', () => { if (tab === 'tabla') render(); }); } catch (e) {}
 })();
 </script>
 </body></html>
