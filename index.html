@@ -344,7 +344,26 @@ const compById = id => S.comps.find(c => c.id === id);
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
 function crestId(name){ const E = S.escudos || {}; const k = norm(name); for (const n in E) if (norm(n) === k) return E[n]; return null; }
 function crestSrc(v){ return !v ? '' : /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : /^[0-9a-f]{32}$/.test(v) ? '/_blob/' + v : ''; }
-function crest(name){ const s = crestSrc(crestId(name)); return s ? `<img class="crest" src="${s}" alt="">` : ''; }
+const GEN_STOP = new Set(['de','del','la','las','el','los','fc','f.c','club','cf','team','y','the','hc','rc']);
+const GEN_FILL = ['#13254F','#1D4590','#2B7DBF','#1E6B52','#A3322A','#5B3A8F','#B86A00','#0F6E78'];
+function genInitials(name){
+  const w = String(name).replace(/[()"'.]/g, ' ').split(/[\s\-_/]+/).filter(Boolean);
+  const k = w.filter(x => !GEN_STOP.has(x.toLowerCase()));
+  const use = k.length ? k : w;
+  if (!use.length) return '?';
+  if (use.length === 1) return /^\d+$/.test(use[0]) ? use[0].slice(0, 3) : use[0].slice(0, 2).toUpperCase();
+  return use.slice(0, 3).map(x => /^\d+$/.test(x) ? x : x[0]).join('').toUpperCase().slice(0, 3);
+}
+const genCache = {};
+function genCrest(name){
+  if (genCache[name]) return genCache[name];
+  let h = 0; for (const ch of norm(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const fill = GEN_FILL[h % GEN_FILL.length], ini = genInitials(name), fs = ini.length > 2 ? 15 : 19;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 46"><path d="M20 2 L37 7 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V7 Z" fill="${fill}" stroke="#F5C518" stroke-width="2.6" stroke-linejoin="round"/><path d="M8 11 H32" stroke="#5BB8F0" stroke-width="2"/><text x="20" y="${ini.length > 2 ? 30 : 31}" text-anchor="middle" font-family="Arial Black,Arial,Helvetica,sans-serif" font-weight="900" font-size="${fs}" fill="#FFFFFF">${ini.replace(/[<&>]/g, '')}</text></svg>`;
+  return (genCache[name] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+}
+function crestFor(name, comp){ const s = crestSrc(crestId(name)); if (s) return s; return comp && comp !== 'rugby' ? genCrest(name) : ''; }
+function crest(name, comp){ const s = crestFor(name, comp); return s ? `<img class="crest" src="${s}" alt="">` : ''; }
 function standings(c, g){
   const rows = {};
   g.equipos.forEach(t => rows[t] = {t, pj:0, g:0, e:0, p:0, pf:0, pc:0, pts:0});
@@ -404,8 +423,8 @@ function matchCard(m){
   const el = editMode ? 'button' : 'div';
   return `<${el} class="match${m.e === 'jugando' ? ' live' : ''}" ${editMode ? `data-act="score" data-id="${m.id}"` : ''}>
     <div class="m-top"><span class="num">${esc(m.h)} · ${esc(m.k)} · ${esc(m.f)}</span><span style="display:flex;gap:4px">${tagc}${tag}</span></div>
-    <div class="m-row"><span class="m-team${L.ph ? ' ph' : ''}${wl ? ' win' : ''}">${L.ph ? '' : crest(L.n)}${esc(L.n)}</span><span class="m-score num${has && wv ? ' lose' : ''}">${has ? m.gl : ''}</span></div>
-    <div class="m-row"><span class="m-team${V.ph ? ' ph' : ''}${wv ? ' win' : ''}">${V.ph ? '' : crest(V.n)}${esc(V.n)}</span><span class="m-score num${has && wl ? ' lose' : ''}">${has ? m.gv : ''}</span></div>
+    <div class="m-row"><span class="m-team${L.ph ? ' ph' : ''}${wl ? ' win' : ''}">${L.ph ? '' : crest(L.n, m.c)}${esc(L.n)}</span><span class="m-score num${has && wv ? ' lose' : ''}">${has ? m.gl : ''}</span></div>
+    <div class="m-row"><span class="m-team${V.ph ? ' ph' : ''}${wv ? ' win' : ''}">${V.ph ? '' : crest(V.n, m.c)}${esc(V.n)}</span><span class="m-score num${has && wl ? ' lose' : ''}">${has ? m.gv : ''}</span></div>
   </${el}>`;
 }
 function viewFixture(){
@@ -427,7 +446,7 @@ function teamMatches(c, team){
     const res = m.e === 'final' && has ? (my > ot ? ['w','G'] : my < ot ? ['l','P'] : ['d','E']) : null;
     const ph = resolveName(c.id, opp).ph;
     return `<div class="tm-l">${res ? `<span class="tm-r ${res[0]}">${res[1]}</span>` : m.e === 'jugando' ? '<span class="tm-r live">EN</span>' : `<span class="tm-h num">${esc(m.h)}</span>`}
-      <span class="tm-o">vs ${ph ? '' : crest(opp)}<span${ph ? ' class="ph"' : ''}>${esc(opp)}</span><small>${esc(m.f)} · ${esc(m.k)}${res || m.e === 'jugando' ? ' · ' + esc(m.h) : ''}</small></span>
+      <span class="tm-o">vs ${ph ? '' : crest(opp, c.id)}<span${ph ? ' class="ph"' : ''}>${esc(opp)}</span><small>${esc(m.f)} · ${esc(m.k)}${res || m.e === 'jugando' ? ' · ' + esc(m.h) : ''}</small></span>
       ${has ? `<b class="num">${my}-${ot}</b>` : '<span></span>'}</div>`; };
   const played = ms.filter(x => x.m.e === 'final'), rest = ms.filter(x => x.m.e !== 'final');
   return `<div class="tm">${played.length ? `<div class="tm-t">Jugados</div>${played.map(line).join('')}` : ''}${rest.length ? `<div class="tm-t">Próximos</div>${rest.map(line).join('')}` : ''}${ms.length ? '' : '<div class="muted" style="padding:6px 0">Sin partidos cargados.</div>'}</div>`;
@@ -443,7 +462,7 @@ function viewTabla(){
       return `<div class="tbl-wrap"><div class="grp-head"><b>Grupo ${esc(g.id)}</b>${groupDone(c, g.id) ? '<span class="tag fin">Cerrado</span>' : ''}</div>
       <table><colgroup><col class="c-pos"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n">${W ? '<col class="c-x"><col class="c-x">' : ''}<col class="c-d"><col class="c-p"></colgroup><thead><tr><th></th><th class="team">Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th>${W ? '<th title="A favor">AF</th><th title="En contra">EC</th>' : ''}<th>Dif</th><th>Pts</th></tr></thead>
       <tbody>${rows.map((r, i) => { const key = c.id + '|' + r.t, open = teamSel === key;
-        return `<tr class="trow${i < 2 ? ' q' : ''}${open ? ' open' : ''}" data-act="team" data-id="${esc(key)}" tabindex="0" aria-expanded="${open}"><td class="pos">${i + 1}</td><td class="team">${crest(r.t)}${esc(r.t)}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></td><td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>${W ? `<td>${r.pf}</td><td>${r.pc}</td>` : ''}<td>${r.pf - r.pc > 0 ? '+' : ''}${r.pf - r.pc}</td><td class="pts">${r.pts}</td></tr>${open ? `<tr class="tm-row"><td colspan="${W ? 10 : 8}">${teamMatches(c, r.t)}</td></tr>` : ''}`; }).join('')}</tbody></table></div>`;
+        return `<tr class="trow${i < 2 ? ' q' : ''}${open ? ' open' : ''}" data-act="team" data-id="${esc(key)}" tabindex="0" aria-expanded="${open}"><td class="pos">${i + 1}</td><td class="team">${crest(r.t, c.id)}${esc(r.t)}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></td><td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>${W ? `<td>${r.pf}</td><td>${r.pc}</td>` : ''}<td>${r.pf - r.pc > 0 ? '+' : ''}${r.pf - r.pc}</td><td class="pts">${r.pts}</td></tr>${open ? `<tr class="tm-row"><td colspan="${W ? 10 : 8}">${teamMatches(c, r.t)}</td></tr>` : ''}`; }).join('')}</tbody></table></div>`;
     }).join('') : '<div class="empty">Sin grupos cargados.</div>'}
   </section>`).join('') + `<p class="legend">Tocá un equipo para ver sus partidos. Los dos primeros de cada grupo pasan a playoffs. Desempate: puntos, diferencia de ${'tantos/goles'}, a favor.</p>`;
 }
@@ -542,8 +561,8 @@ function admInsc(){
   ${list.length ? S.comps.map(c => { const items = list.filter(x => x.comp === c.id); const cobr = items.reduce((s, x) => s + cobrado(x), 0);
     return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${$$(cobr)}</small></h2>
     ${items.length ? `<div class="list">${items.map(x => {
-    const cid = crestId(x.club);
-    return `<div class="li wc"><button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${crestSrc(cid) ? `<img src="${crestSrc(cid)}" alt="">` : '+'}</button><button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${esc(c ? c.nombre : x.comp)} · ${x.provincia ? esc(x.provincia) + ' · ' : ''}${x.jugadores ? esc(x.jugadores) + ' jug.' : ''}${x.aloj && x.aloj !== 'No' ? ' · ' + esc(x.aloj) : ''}${x.contacto ? ' · ' + esc(x.contacto) : ''}</span></button>
+    const cs = crestFor(x.club, x.comp);
+    return `<div class="li wc"><button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button><button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${esc(c ? c.nombre : x.comp)} · ${x.provincia ? esc(x.provincia) + ' · ' : ''}${x.jugadores ? esc(x.jugadores) + ' jug.' : ''}${x.aloj && x.aloj !== 'No' ? ' · ' + esc(x.aloj) : ''}${x.contacto ? ' · ' + esc(x.contacto) : ''}</span></button>
     <div class="li-r"><span class="amt">${$$(x.monto)}</span><button class="pill ${payState(x)[0]}" data-act="pay" data-id="${x.id}">${payState(x)[1]}</button>${!x.pagado && !x.bonif && +x.sena > 0 ? `<span class="li-s num">Pagó ${$$(cobrado(x))} · <b style="color:var(--bad)">Resta ${$$(Math.max(0, (+x.monto || 0) - cobrado(x)))}</b></span>` : ''}</div></div>`;
     }).join('')}</div>` : '<div class="empty">Sin equipos inscriptos.</div>'}</section>`; }).join('') : '<div class="empty">Todavía no hay equipos inscriptos. Tocá <b>Inscribir equipo</b> para cargar el primero.</div>'}`;
 }
