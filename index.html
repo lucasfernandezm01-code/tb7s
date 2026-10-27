@@ -141,6 +141,32 @@ td.team{overflow:hidden;text-overflow:ellipsis}
 @media (prefers-reduced-motion:reduce){.aviso.new .av-ic{animation:none}}
 .av-prev{border:1px dashed var(--line);border-radius:12px;overflow:hidden}
 
+/* mi equipo */
+.mine-card{background:var(--navy);color:#fff;border-radius:14px;padding:12px 14px;display:grid;gap:10px;box-shadow:inset 0 -4px 0 var(--gold)}
+.mine-card .link-btn{color:var(--gold);padding:4px 0}
+.mine-card.pick label{font-weight:700;font-size:15px;display:flex;align-items:center;gap:6px}
+.mine-card.pick select{width:100%;border:1.5px solid var(--gold);background:var(--navy-2);color:#fff;border-radius:10px;padding:10px;font-size:16px}
+.mine-card .legend{color:rgba(255,255,255,.7)}
+.mine-acts{display:flex;gap:16px}
+.mine-star{color:var(--gold)}
+.mine-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.mine-team{font-family:var(--display);font-weight:800;font-size:17px;text-transform:uppercase;letter-spacing:.02em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mine-team .crest{width:1.4em;height:1.4em}
+.mine-next{background:rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center}
+.mine-next .mine-lbl,.mine-next .tag{grid-column:1/-1;justify-self:start;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.mine-next .tag.live{color:#fff}
+.mine-next b{font-size:17px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mine-next small{grid-column:1/-1;color:rgba(255,255,255,.7);font-size:13px}
+.mine-time,.mine-score{font-family:var(--display);font-weight:800;font-size:24px;color:var(--gold);grid-row:2;grid-column:2}
+.mine-stats{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:13px;color:rgba(255,255,255,.8)}
+.mine-stats b{color:#fff}
+.mine-stats .link-btn{margin-left:auto}
+.match.mine{border-color:var(--gold);box-shadow:inset 3px 0 0 var(--gold)}
+.match.live.mine{box-shadow:inset 3px 0 0 var(--live)}
+.tag.mine-tag{background:var(--gold);color:var(--navy-2)}
+tr.trow.mine td{background:var(--gold-soft)}
+tr.trow.mine td.team{font-weight:800}
+
 /* fixture subtabs */
 .subtabs{background:var(--surface);border:1px solid var(--line)}
 .subtabs button{display:flex;align-items:center;justify-content:center;gap:6px}
@@ -352,6 +378,7 @@ const UI = store.get('tb7s-ui') || {};
 let tab = ['fixture','tabla','agenda','mapa','admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) : (UI.tab || 'fixture');
 let comp = UI.comp || 'all';
 let adminTab = UI.adminTab || 'resumen';
+let myTeams = store.get('tb7s-mine') || {}, mineEdit = false;
 let editMode = false, isAdmin = false, mapSel = null, placing = false, fixSel = null, teamSel = null;
 const saveUI = () => store.set('tb7s-ui', {tab, comp, adminTab});
 
@@ -466,11 +493,35 @@ function matchCard(m){
   const tag = m.e === 'jugando' ? '<span class="tag live"><span class="pulse"></span>En juego</span>' : m.e === 'final' ? '<span class="tag fin">Final</span>' : `<span class="tag prog num">${esc(m.h)}</span>`;
   const tagc = comp === 'all' && c ? `<span class="tag comp">${esc(c.nombre)}</span>` : '';
   const el = editMode ? 'button' : 'div';
-  return `<${el} class="match${m.e === 'jugando' ? ' live' : ''}" ${editMode ? `data-act="score" data-id="${m.id}"` : ''}>
-    <div class="m-top"><span class="num">${esc(m.h)} · ${esc(m.k)} · ${esc(m.f)}</span><span style="display:flex;gap:4px">${tagc}${tag}</span></div>
+  const mt = myTeams[m.c], isMine = mt && (norm(L.n) === norm(mt) || norm(V.n) === norm(mt));
+  return `<${el} class="match${m.e === 'jugando' ? ' live' : ''}${isMine ? ' mine' : ''}" ${editMode ? `data-act="score" data-id="${m.id}"` : ''}>
+    <div class="m-top"><span class="num">${esc(m.h)} · ${esc(m.k)} · ${esc(m.f)}</span><span style="display:flex;gap:4px">${isMine ? '<span class="tag mine-tag">★ Tu equipo</span>' : ''}${tagc}${tag}</span></div>
     <div class="m-row"><span class="m-team${L.ph ? ' ph' : ''}${wl ? ' win' : ''}">${L.ph ? '' : crest(L.n, m.c)}${esc(L.n)}</span><span class="m-score num${has && wv ? ' lose' : ''}">${has ? m.gl : ''}</span></div>
     <div class="m-row"><span class="m-team${V.ph ? ' ph' : ''}${wv ? ' win' : ''}">${V.ph ? '' : crest(V.n, m.c)}${esc(V.n)}</span><span class="m-score num${has && wl ? ' lose' : ''}">${has ? m.gv : ''}</span></div>
   </${el}>`;
+}
+function compTeams(cid){ const c = compById(cid); return c ? [...new Set(c.grupos.flatMap(g => g.equipos))].sort((a, b) => a.localeCompare(b)) : []; }
+function setMine(cid, team){ if (team) myTeams[cid] = team; else delete myTeams[cid]; store.set('tb7s-mine', myTeams); mineEdit = false; render(); }
+function miEquipo(cid){
+  const teams = compTeams(cid); if (!teams.length) return '';
+  const mt = myTeams[cid] && teams.find(x => norm(x) === norm(myTeams[cid]));
+  if (!mt || mineEdit) return `<div class="mine-card pick"><label for="mine_sel"><span class="mine-star">★</span> ${mt ? 'Cambiá tu equipo' : 'Seguí a tu equipo'}</label>
+    <select id="mine_sel"><option value="">Elegí tu equipo…</option>${teams.map(x => `<option ${mt === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+    ${mt ? `<div class="mine-acts"><button class="link-btn" data-act="mineoff">Dejar de seguir</button><button class="link-btn" data-act="minecancel">Cancelar</button></div>` : '<p class="legend" style="margin:0">Lo vas a ver primero, con su próximo partido, horario y cancha.</p>'}</div>`;
+  const c = compById(cid);
+  const ms = S.partidos.filter(m => m.c === cid).map(m => ({m, L:resolveName(cid, m.l).n, V:resolveName(cid, m.v).n})).filter(x => norm(x.L) === norm(mt) || norm(x.V) === norm(mt)).sort((a, b) => a.m.h.localeCompare(b.m.h));
+  const live = ms.find(x => x.m.e === 'jugando'), next = ms.find(x => x.m.e === 'prog'), played = ms.filter(x => x.m.e === 'final');
+  const g = c.grupos.find(gr => gr.equipos.some(e => norm(e) === norm(mt)));
+  const pos = g ? standings(c, g).findIndex(r => norm(r.t) === norm(mt)) + 1 : 0;
+  let gw = 0, gd = 0, gl = 0; played.forEach(x => { const home = norm(x.L) === norm(mt), my = home ? x.m.gl : x.m.gv, ot = home ? x.m.gv : x.m.gl; if (my > ot) gw++; else if (my < ot) gl++; else gd++; });
+  const opp = x => norm(x.L) === norm(mt) ? x.V : x.L;
+  const sc = x => { const home = norm(x.L) === norm(mt); return `${home ? x.m.gl : x.m.gv}-${home ? x.m.gv : x.m.gl}`; };
+  const big = live ? `<div class="mine-next live"><span class="tag live"><span class="pulse"></span>Jugando ahora</span><b>vs ${crest(opp(live), cid)}${esc(opp(live))}</b><span class="mine-score num">${live.m.gl != null ? sc(live) : ''}</span><small>${esc(live.m.k)} · ${esc(live.m.f)}</small></div>`
+    : next ? `<div class="mine-next"><span class="mine-lbl">Próximo partido</span><b>vs ${resolveName(cid, opp(next)).ph ? '' : crest(opp(next), cid)}${esc(opp(next))}</b><span class="mine-time num">${esc(next.m.h)}</span><small>${esc(next.m.k)} · ${esc(next.m.f)}</small></div>`
+    : `<div class="mine-next"><span class="mine-lbl">Sin partidos pendientes</span>${played.length ? `<b>Último: vs ${esc(opp(played[played.length - 1]))} ${sc(played[played.length - 1])}</b>` : ''}</div>`;
+  return `<div class="mine-card"><div class="mine-head"><span class="mine-team">${crest(mt, cid)}${esc(mt)}</span><button class="link-btn" data-act="mineedit">Cambiar</button></div>
+    ${big}
+    <div class="mine-stats">${pos ? `<span><b>${pos}°</b> Grupo ${esc(g.id)}</span>` : ''}<span><b class="num">${gw}-${gd}-${gl}</b> G-E-P</span><span><b class="num">${played.length}/${ms.length}</b> jugados</span><button class="link-btn" data-act="minetabla">Ver en la tabla</button></div></div>`;
 }
 function viewFixture(){
   const ms = S.partidos.filter(m => comp === 'all' || m.c === comp).sort((a,b) => a.h.localeCompare(b.h) || a.k.localeCompare(b.k));
@@ -481,6 +532,7 @@ function viewFixture(){
   const emptyMsg = {live:'No hay partidos en juego ahora.', next:'No quedan partidos por jugar.', done:'Todavía no terminó ningún partido.'}[sel];
   return `${editMode ? `<div class="toolbar"><button class="btn primary" data-act="newmatch">+ Agregar partido</button><span class="muted" style="align-self:center;font-size:13px">Tocá un partido para cargar el resultado</span></div>` : ''}
     <div class="seg subtabs" role="group" aria-label="Estado de los partidos">${opts.map(([k, l, a]) => `<button data-act="fixsel" data-id="${k}" aria-pressed="${sel === k}">${k === 'live' && a.length ? '<span class="dotlive"></span>' : ''}${l} <span class="cnt num">${a.length}</span></button>`).join('')}</div>
+    ${miEquipo(comp)}
     ${ms.length ? (arr.length ? `<section class="stack">${arr.map(matchCard).join('')}</section>` : `<div class="empty">${emptyMsg}</div>`) : '<div class="empty">Todavía no hay partidos cargados para esta competencia.</div>'}`;
 }
 function teamMatches(c, team){
@@ -507,7 +559,8 @@ function viewTabla(){
       return `<div class="tbl-wrap"><div class="grp-head"><b>Grupo ${esc(g.id)}</b>${groupDone(c, g.id) ? '<span class="tag fin">Cerrado</span>' : ''}</div>
       <table><colgroup><col class="c-pos"><col><col class="c-n"><col class="c-n"><col class="c-n"><col class="c-n">${W ? '<col class="c-x"><col class="c-x">' : ''}<col class="c-d"><col class="c-p"></colgroup><thead><tr><th></th><th class="team">Equipo</th><th>PJ</th><th>G</th><th>E</th><th>P</th>${W ? '<th title="A favor">AF</th><th title="En contra">EC</th>' : ''}<th>Dif</th><th>Pts</th></tr></thead>
       <tbody>${rows.map((r, i) => { const key = c.id + '|' + r.t, open = teamSel === key;
-        return `<tr class="trow${i < 2 ? ' q' : ''}${open ? ' open' : ''}" data-act="team" data-id="${esc(key)}" tabindex="0" aria-expanded="${open}"><td class="pos">${i + 1}</td><td class="team">${crest(r.t, c.id)}${esc(r.t)}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></td><td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>${W ? `<td>${r.pf}</td><td>${r.pc}</td>` : ''}<td>${r.pf - r.pc > 0 ? '+' : ''}${r.pf - r.pc}</td><td class="pts">${r.pts}</td></tr>${open ? `<tr class="tm-row"><td colspan="${W ? 10 : 8}">${teamMatches(c, r.t)}</td></tr>` : ''}`; }).join('')}</tbody></table></div>`;
+        const mine = myTeams[c.id] && norm(myTeams[c.id]) === norm(r.t);
+        return `<tr class="trow${i < 2 ? ' q' : ''}${open ? ' open' : ''}${mine ? ' mine' : ''}" data-act="team" data-id="${esc(key)}" tabindex="0" aria-expanded="${open}"><td class="pos">${i + 1}</td><td class="team">${crest(r.t, c.id)}${esc(r.t)}<span class="chev" aria-hidden="true">${open ? '▴' : '▾'}</span></td><td>${r.pj}</td><td>${r.g}</td><td>${r.e}</td><td>${r.p}</td>${W ? `<td>${r.pf}</td><td>${r.pc}</td>` : ''}<td>${r.pf - r.pc > 0 ? '+' : ''}${r.pf - r.pc}</td><td class="pts">${r.pts}</td></tr>${open ? `<tr class="tm-row"><td colspan="${W ? 10 : 8}">${teamMatches(c, r.t)}</td></tr>` : ''}`; }).join('')}</tbody></table></div>`;
     }).join('') : '<div class="empty">Sin grupos cargados.</div>'}
   </section>`).join('') + `<p class="legend">Tocá un equipo para ver sus partidos. Los dos primeros de cada grupo pasan a playoffs. Desempate: puntos, diferencia de ${'tantos/goles'}, a favor.</p>`;
 }
@@ -993,6 +1046,10 @@ document.addEventListener('click', e => {
   if (a === 'tab') { tab = id; editMode = editMode && tab !== 'admin'; saveUI(); render(); window.scrollTo(0, 0); }
   else if (a === 'comp') { comp = id; fixSel = null; teamSel = null; saveUI(); render(); }
   else if (a === 'fixsel') { fixSel = id; render(); }
+  else if (a === 'mineedit') { mineEdit = true; render(); }
+  else if (a === 'minecancel') { mineEdit = false; render(); }
+  else if (a === 'mineoff') setMine(comp, null);
+  else if (a === 'minetabla') { const mt = myTeams[comp]; tab = 'tabla'; teamSel = mt ? comp + '|' + (compTeams(comp).find(x => norm(x) === norm(mt)) || mt) : null; saveUI(); render(); setTimeout(() => { const r = document.querySelector('tr.trow.open'); if (r) r.scrollIntoView({block:'center', behavior:'smooth'}); }, 50); }
   else if (a === 'team') { teamSel = teamSel === id ? null : id; render(); }
   else if (a === 'edit') { editMode = !editMode; placing = false; render(); }
   else if (a === 'close') closeSheet();
@@ -1072,7 +1129,7 @@ document.addEventListener('input', e => {
   if (e.target.id === 'av_txt') { avDraft.txt = e.target.value; const pv = document.querySelector('.av-prev'); const html = avDraft.txt.trim() ? avisoHtml({id:'prev', txt:avDraft.txt.trim(), tipo:avDraft.tipo, at:new Date().toISOString()}, {noX:true}) : '';
     if (pv && html) pv.innerHTML = html; else if (!!pv !== !!html) { const pos = e.target.selectionStart; render(); const ta = document.getElementById('av_txt'); if (ta) { ta.focus(); try { ta.setSelectionRange(pos, pos); } catch (er) {} } } }
 });
-document.addEventListener('change', e => { if (e.target.id === 'av_dura') avDraft.dura = e.target.value; });
+document.addEventListener('change', e => { if (e.target.id === 'av_dura') avDraft.dura = e.target.value; if (e.target.id === 'mine_sel' && e.target.value) setMine(comp, e.target.value); });
 document.addEventListener('submit', e => { if (e.target.id === 'frm' && formCtx) { e.preventDefault(); formCtx.onSave(readForm()); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr.trow')) { e.preventDefault(); e.target.click(); } });
 
