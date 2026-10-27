@@ -8,3 +8,4 @@ Sitio del evento (Hindú Club, 12/12/2026): Rugby 7s, Hockey Mixto y Fútbol Fem
 - Lo público se edita en el sitio con "Editar" (queda como borrador en el navegador) y se sube con "Publicar"; el resto de los celulares lo recibe por Realtime (y cada 60 s).
 - `SEED` en `index.html` es el estado inicial: si la tabla está vacía, el primer admin que entra lo sube.
 - Nunca subir al repo datos privados (teléfonos, montos): van solo en la base.
+- Versión: en cada cambio de `index.html` actualizar `APP_V` (arriba del script) y `version.json` con el mismo valor (AAAAMMDDHHMMSS). La app compara y se recarga sola cuando hay versión nueva.

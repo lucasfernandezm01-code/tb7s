@@ -332,6 +332,17 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
+const APP_V = '20261026233104';
+async function checkVersion(){
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
+    const j = await r.json();
+    if (j.v && j.v !== APP_V) { const k = 'tb7s-reload-' + j.v; if (sessionStorage.getItem(k)) return; sessionStorage.setItem(k, '1'); location.replace(location.pathname + '?v=' + j.v + location.hash); }
+  } catch (e) {}
+}
+checkVersion();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+setInterval(checkVersion, 5 * 60000);
 const SB_URL = 'https://vemvjxozfchaitlmlypb.supabase.co';
 const SB_KEY = 'sb_publishable_TE4CBeTK9CrrdJTp1Loxvw_uCm5Sc5o';
 const sb = (window.supabase && !SB_URL.startsWith('PEGAR')) ? window.supabase.createClient(SB_URL, SB_KEY, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}}) : null;
