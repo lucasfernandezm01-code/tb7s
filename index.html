@@ -167,6 +167,30 @@ td.team{overflow:hidden;text-overflow:ellipsis}
 tr.trow.mine td{background:var(--gold-soft)}
 tr.trow.mine td.team{font-weight:800}
 
+/* playoffs bracket */
+.bk-wrap{overflow-x:auto;margin-inline:calc(-1 * max(16px, env(safe-area-inset-left, 0px)));padding-inline:max(16px, env(safe-area-inset-left, 0px));padding-bottom:4px;scrollbar-width:thin}
+.bk{display:grid;gap:22px;min-width:min-content}
+.bk-col{display:flex;flex-direction:column;min-width:0}
+.bk-r{font-family:var(--display);font-weight:800;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center;margin-bottom:8px}
+.bk-list{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:12px}
+.bk-m{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:visible}
+.bk-m.live{border-color:var(--live);box-shadow:inset 3px 0 0 var(--live)}
+.bk-col.has-next .bk-m::after{content:"";position:absolute;right:-23px;top:50%;width:22px;border-top:2px solid var(--line)}
+.bk-h{display:flex;justify-content:space-between;gap:6px;font-size:11px;font-weight:600;color:var(--muted);padding:6px 10px 2px}
+.bk-h .tag{font-size:10px;padding:1px 5px}
+.bk-t{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 10px;border-top:1px solid var(--line)}
+.bk-t:first-of-type{border-top:0}
+.bk-n{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:14px}
+.bk-n .ph{color:var(--muted);font-style:italic;font-weight:500}
+.bk-t b{font-family:var(--display);font-weight:800;font-size:16px}
+.bk-t.win{background:var(--gold-soft)} .bk-t.win .bk-n{font-weight:800}
+.bk-t.lose{opacity:.55}
+.bk-t.mine{box-shadow:inset 3px 0 0 var(--gold)}
+.bk-m .bk-t:last-child{border-radius:0 0 10px 10px}
+.bk-champ{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--navy);color:#fff;border-radius:12px;padding:10px 14px;font-size:20px;box-shadow:inset 0 -4px 0 var(--gold)}
+.bk-champ span{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);font-weight:700}
+.bk-champ b{font-family:var(--display);font-size:17px;font-weight:800;margin-left:auto}
+
 /* fixture subtabs */
 .subtabs{background:var(--surface);border:1px solid var(--line)}
 .subtabs button{display:flex;align-items:center;justify-content:center;gap:6px}
@@ -332,7 +356,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261026233104';
+const APP_V = '20261026235705';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -389,7 +413,7 @@ const UI = store.get('tb7s-ui') || {};
 let tab = ['fixture','tabla','agenda','mapa','admin'].includes(location.hash.slice(1)) ? location.hash.slice(1) : (UI.tab || 'fixture');
 let comp = UI.comp || 'all';
 let adminTab = UI.adminTab || 'resumen';
-let myTeams = store.get('tb7s-mine') || {}, mineEdit = false;
+let myTeams = store.get('tb7s-mine') || {}, mineEdit = false, tablaSel = 'grupos', copaSel = null;
 let editMode = false, isAdmin = false, mapSel = null, placing = false, fixSel = null, teamSel = null;
 const saveUI = () => store.set('tb7s-ui', {tab, comp, adminTab});
 
@@ -445,9 +469,33 @@ function groupDone(c, gid){
   const ms = S.partidos.filter(m => m.c === c.id && m.g === gid);
   return ms.length > 0 && ms.every(m => m.e === 'final');
 }
-function resolveName(cid, name){
+/* playoffs: fase "Copa de Oro - Semifinal 1" → copa + ronda + número */
+const RONDAS = [['octavos', 'Octavos', /octav|^of/], ['cuartos', 'Cuartos', /cuart|^cf|^qf/], ['semis', 'Semifinal', /semi|^sf/], ['final', 'Final', /^final|^f$/], ['tercero', '3er puesto', /terc|3er|3ro|bronce.*partido/]];
+function parseFase(f){
+  const s = String(f || '').trim(); let copa = '', rest = s;
+  const m = /^(.*?)\s*[-–·:]\s*(.+)$/.exec(s); if (m && /copa|oro|plata|bronce|cuchara/i.test(m[1])) { copa = m[1].trim(); rest = m[2]; }
+  const k = norm(rest.replace(/\d+/g, '')), num = Number((/(\d+)/.exec(rest) || [])[1] || 0);
+  const r = RONDAS.find(x => x[2].test(k)) || (/^final/.test(norm(rest)) ? RONDAS[3] : null);
+  return r ? {copa, ronda:r[0], label:r[1], num} : null;
+}
+function findRef(cid, ref, copa){
+  const p = parseFase(ref); if (!p) return null;
+  const cands = S.partidos.filter(m => m.c === cid && !m.g).map(m => ({m, f:parseFase(m.f)})).filter(x => x.f && x.f.ronda === p.ronda && x.f.num === p.num && (!p.copa || norm(x.f.copa) === norm(p.copa)));
+  return (cands.find(x => norm(x.f.copa) === norm(copa || '')) || cands[0] || {}).m || null;
+}
+function rn(m, side){ return resolveName(m.c, m[side], (parseFase(m.f) || {}).copa); }
+function resolveName(cid, name, copa, depth){
+  const w = /^(Ganador|Perdedor)\s+(.+)$/i.exec(name || '');
+  if (w) {
+    const m = (depth || 0) < 6 && findRef(cid, w[2], copa);
+    if (!m || m.e !== 'final' || m.gl == null || m.gv == null || m.gl === m.gv) return {n:name, ph:true};
+    const mc = (parseFase(m.f) || {}).copa;
+    const L = resolveName(cid, m.l, mc, (depth || 0) + 1), V = resolveName(cid, m.v, mc, (depth || 0) + 1);
+    const win = m.gl > m.gv, pick = /^g/i.test(w[1]) ? (win ? L : V) : (win ? V : L);
+    return pick.ph ? {n:name, ph:true} : pick;
+  }
   const mt = /^(\d+)° ?([A-Z0-9]+)$/.exec(name || '');
-  if (!mt) return {n:name, ph:/^(Ganador|Perdedor)/.test(name || '')};
+  if (!mt) return {n:name, ph:false};
   const c = compById(cid), g = c && c.grupos.find(x => x.id === mt[2]);
   if (!g || !groupDone(c, g.id)) return {n:name, ph:true};
   const r = standings(c, g)[Number(mt[1]) - 1];
@@ -498,7 +546,7 @@ function chips(withAll){
   return `<div class="chips"><div class="wrap" role="group" aria-label="Competencia">${list.map(c => `<button class="chip" data-act="comp" data-id="${c.id}" aria-pressed="${comp === c.id}">${esc(c.nombre)}</button>`).join('')}</div></div>`;
 }
 function matchCard(m){
-  const c = compById(m.c), L = resolveName(m.c, m.l), V = resolveName(m.c, m.v);
+  const c = compById(m.c), L = rn(m, 'l'), V = rn(m, 'v');
   const has = m.gl != null && m.gv != null && m.e !== 'prog';
   const wl = has && m.gl > m.gv, wv = has && m.gv > m.gl;
   const tag = m.e === 'jugando' ? '<span class="tag live"><span class="pulse"></span>En juego</span>' : m.e === 'final' ? '<span class="tag fin">Final</span>' : `<span class="tag prog num">${esc(m.h)}</span>`;
@@ -520,7 +568,7 @@ function miEquipo(cid){
     <select id="mine_sel"><option value="">Elegí tu equipo…</option>${teams.map(x => `<option ${mt === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
     ${mt ? `<div class="mine-acts"><button class="link-btn" data-act="mineoff">Dejar de seguir</button><button class="link-btn" data-act="minecancel">Cancelar</button></div>` : '<p class="legend" style="margin:0">Lo vas a ver primero, con su próximo partido, horario y cancha.</p>'}</div>`;
   const c = compById(cid);
-  const ms = S.partidos.filter(m => m.c === cid).map(m => ({m, L:resolveName(cid, m.l).n, V:resolveName(cid, m.v).n})).filter(x => norm(x.L) === norm(mt) || norm(x.V) === norm(mt)).sort((a, b) => a.m.h.localeCompare(b.m.h));
+  const ms = S.partidos.filter(m => m.c === cid).map(m => ({m, L:rn(m, 'l').n, V:rn(m, 'v').n})).filter(x => norm(x.L) === norm(mt) || norm(x.V) === norm(mt)).sort((a, b) => a.m.h.localeCompare(b.m.h));
   const live = ms.find(x => x.m.e === 'jugando'), next = ms.find(x => x.m.e === 'prog'), played = ms.filter(x => x.m.e === 'final');
   const g = c.grupos.find(gr => gr.equipos.some(e => norm(e) === norm(mt)));
   const pos = g ? standings(c, g).findIndex(r => norm(r.t) === norm(mt)) + 1 : 0;
@@ -547,7 +595,7 @@ function viewFixture(){
     ${ms.length ? (arr.length ? `<section class="stack">${arr.map(matchCard).join('')}</section>` : `<div class="empty">${emptyMsg}</div>`) : '<div class="empty">Todavía no hay partidos cargados para esta competencia.</div>'}`;
 }
 function teamMatches(c, team){
-  const ms = S.partidos.filter(m => m.c === c.id).map(m => ({m, L:resolveName(m.c, m.l).n, V:resolveName(m.c, m.v).n})).filter(x => x.L === team || x.V === team)
+  const ms = S.partidos.filter(m => m.c === c.id).map(m => ({m, L:rn(m, 'l').n, V:rn(m, 'v').n})).filter(x => x.L === team || x.V === team)
     .sort((a, b) => a.m.h.localeCompare(b.m.h));
   const line = x => { const m = x.m, home = x.L === team, opp = home ? x.V : x.L, my = home ? m.gl : m.gv, ot = home ? m.gv : m.gl;
     const has = m.gl != null && m.gv != null && m.e !== 'prog';
@@ -559,10 +607,34 @@ function teamMatches(c, team){
   const played = ms.filter(x => x.m.e === 'final'), rest = ms.filter(x => x.m.e !== 'final');
   return `<div class="tm">${played.length ? `<div class="tm-t">Jugados</div>${played.map(line).join('')}` : ''}${rest.length ? `<div class="tm-t">Próximos</div>${rest.map(line).join('')}` : ''}${ms.length ? '' : '<div class="muted" style="padding:6px 0">Sin partidos cargados.</div>'}</div>`;
 }
+function viewPlayoffs(c){
+  const ms = S.partidos.filter(m => m.c === c.id && !m.g).map(m => ({m, f:parseFase(m.f)})).filter(x => x.f);
+  if (!ms.length) return '<div class="empty">Todavía no hay partidos de playoffs cargados para este deporte. Cargalos en el Fixture con fase "Semifinal 1", "Final", etc.</div>';
+  const copas = [...new Set(ms.map(x => x.f.copa))];
+  const cp = copas.includes(copaSel) ? copaSel : copas[0];
+  const mine = myTeams[c.id];
+  const rondas = RONDAS.filter(r => r[0] !== 'tercero' && ms.some(x => x.f.copa === cp && x.f.ronda === r[0]));
+  const box = x => { const m = x.m, L = rn(m, 'l'), V = rn(m, 'v'), has = m.gl != null && m.gv != null && m.e !== 'prog', fin = m.e === 'final' && has;
+    const row = (T, g, won) => `<div class="bk-t${won ? ' win' : ''}${fin && !won ? ' lose' : ''}${mine && !T.ph && norm(T.n) === norm(mine) ? ' mine' : ''}"><span class="bk-n">${T.ph ? '' : crest(T.n, c.id)}<span${T.ph ? ' class="ph"' : ''}>${esc(T.ph ? T.n.replace(/\bSF\s?(\d)/i, 'Semi $1').replace(/\b(CF|QF)\s?(\d)/i, 'Cuartos $2') : T.n)}</span></span><b class="num">${has ? g : ''}</b></div>`;
+    return `<div class="bk-m${m.e === 'jugando' ? ' live' : ''}"><div class="bk-h"><span>${esc(x.f.label)}${x.f.num ? ' ' + x.f.num : ''}</span><span class="num">${m.e === 'jugando' ? '<span class="tag live"><span class="pulse"></span>En juego</span>' : esc(m.h) + ' · ' + esc(m.k)}</span></div>${row(L, m.gl, fin && m.gl > m.gv)}${row(V, m.gv, fin && m.gv > m.gl)}</div>`; };
+  const champ = (() => { const f = ms.find(x => x.f.copa === cp && x.f.ronda === 'final'); if (!f || f.m.e !== 'final' || f.m.gl === f.m.gv || f.m.gl == null) return null; const w = f.m.gl > f.m.gv ? rn(f.m, 'l') : rn(f.m, 'v'); return w.ph ? null : w.n; })();
+  const third = ms.filter(x => x.f.copa === cp && x.f.ronda === 'tercero');
+  return `${copas.length > 1 ? `<div class="toolbar" style="flex-wrap:nowrap;overflow-x:auto">${copas.map(k => `<button class="chip" data-act="copasel" data-id="${esc(k)}" aria-pressed="${k === cp}">${esc(k || 'Principal')}</button>`).join('')}</div>` : ''}
+    ${champ ? `<div class="bk-champ">🏆 <span>Campeón${cp ? ' ' + esc(cp) : ''}</span><b>${crest(champ, c.id)}${esc(champ)}</b></div>` : ''}
+    <div class="bk-wrap"><div class="bk" style="grid-template-columns:repeat(${rondas.length}, minmax(190px, 1fr))">${rondas.map((r, i) => {
+      const col = ms.filter(x => x.f.copa === cp && x.f.ronda === r[0]).sort((a, b) => a.f.num - b.f.num || a.m.h.localeCompare(b.m.h));
+      return `<div class="bk-col${i < rondas.length - 1 ? ' has-next' : ''}"><div class="bk-r">${esc(r[1] === 'Semifinal' ? 'Semis' : r[1])}</div><div class="bk-list">${col.map(box).join('')}</div></div>`; }).join('')}</div></div>
+    ${third.length ? `<div class="stack"><div class="bk-r" style="text-align:left">3er puesto</div>${third.map(box).join('')}</div>` : ''}
+    ${rondas.length > 1 ? '<p class="legend" style="margin:0">Deslizá para ver la llave completa.</p>' : ''}`;
+}
 function viewTabla(){
   const W = window.matchMedia('(min-width:521px)').matches;
   const cs = comp === 'all' ? S.comps : S.comps.filter(c => c.id === comp);
-  return cs.map(c => `<section class="stack">
+  const cc = cs[0], hasPO = cc && S.partidos.some(m => m.c === cc.id && !m.g && parseFase(m.f));
+  const tsel = tablaSel === 'po' ? 'po' : 'grupos';
+  const sub = `<div class="seg subtabs" role="group" aria-label="Vista de la tabla"><button data-act="tablasel" data-id="grupos" aria-pressed="${tsel === 'grupos'}">Grupos</button><button data-act="tablasel" data-id="po" aria-pressed="${tsel === 'po'}">Playoffs${hasPO ? '' : ' <span class="cnt">0</span>'}</button></div>`;
+  if (tsel === 'po' && cc) return sub + `<section class="stack"><h2 class="sec-title">${esc(cc.nombre)}<small>Playoffs</small></h2>${viewPlayoffs(cc)}</section>`;
+  return sub + cs.map(c => `<section class="stack">
     <h2 class="sec-title">${esc(c.nombre)}<small>G ${c.pts.g} · E ${c.pts.e} · P ${c.pts.p} pts</small></h2>
     ${editMode ? `<div class="toolbar"><button class="btn" data-act="groups" data-id="${c.id}">Editar grupos y equipos</button></div>` : ''}
     ${c.grupos.length ? c.grupos.map(g => {
@@ -879,7 +951,7 @@ function openScore(id){
   const m = clone(S.partidos.find(x => x.id === id)); if (!m) return;
   scoreCtx = m; formCtx = null;
   const rug = m.c === 'rugby';
-  const L = resolveName(m.c, m.l).n, V = resolveName(m.c, m.v).n;
+  const L = rn(m, 'l').n, V = rn(m, 'v').n;
   const side = (k, name) => `<div class="sc-team"><span class="sc-name">${esc(name)}</span><div class="sc-ctrl"><button data-act="sc" data-side="${k}" data-d="-1" aria-label="Restar">−</button><input id="sc_${k}" type="number" inputmode="numeric" min="0" value="${m['g' + k] == null ? 0 : m['g' + k]}"><button data-act="sc" data-side="${k}" data-d="1">+1</button>${rug ? `<button data-act="sc" data-side="${k}" data-d="5">+5</button><button data-act="sc" data-side="${k}" data-d="7">+7</button><button data-act="sc" data-side="${k}" data-d="2">+2</button>` : ''}</div></div>`;
   panel.innerHTML = `<div class="sh-head"><h2>Resultado</h2><button class="icon-btn" data-act="close" aria-label="Cerrar">×</button></div>
     <p class="muted" style="margin:0 0 6px;font-size:13px">${esc(m.h)} · ${esc(m.k)} · ${esc(m.f)}</p>
@@ -1055,8 +1127,10 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const a = b.dataset.act, id = b.dataset.id;
   if (a === 'tab') { tab = id; editMode = editMode && tab !== 'admin'; saveUI(); render(); window.scrollTo(0, 0); }
-  else if (a === 'comp') { comp = id; fixSel = null; teamSel = null; saveUI(); render(); }
+  else if (a === 'comp') { comp = id; fixSel = null; teamSel = null; copaSel = null; saveUI(); render(); }
   else if (a === 'fixsel') { fixSel = id; render(); }
+  else if (a === 'tablasel') { tablaSel = id; render(); }
+  else if (a === 'copasel') { copaSel = id; render(); }
   else if (a === 'mineedit') { mineEdit = true; render(); }
   else if (a === 'minecancel') { mineEdit = false; render(); }
   else if (a === 'mineoff') setMine(comp, null);
