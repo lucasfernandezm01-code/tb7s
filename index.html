@@ -358,8 +358,19 @@ const genCache = {};
 function genCrest(name){
   if (genCache[name]) return genCache[name];
   let h = 0; for (const ch of norm(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const fill = GEN_FILL[h % GEN_FILL.length], ini = genInitials(name), fs = ini.length > 2 ? 15 : 19;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 46"><path d="M20 2 L37 7 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V7 Z" fill="${fill}" stroke="#F5C518" stroke-width="2.6" stroke-linejoin="round"/><path d="M8 11 H32" stroke="#5BB8F0" stroke-width="2"/><text x="20" y="${ini.length > 2 ? 30 : 31}" text-anchor="middle" font-family="Arial Black,Arial,Helvetica,sans-serif" font-weight="900" font-size="${fs}" fill="#FFFFFF">${ini.replace(/[<&>]/g, '')}</text></svg>`;
+  const fill = GEN_FILL[h % GEN_FILL.length];
+  const words = String(name).trim().split(/\s+/).filter(Boolean);
+  const W = 23, total = words.join(' ').length;
+  const nl = Math.min(words.length, total <= 8 ? 1 : total <= 18 ? 2 : 3);
+  const splits = (ws, k) => { if (k === 1) return [[ws.join(' ')]]; const out = []; for (let i = 1; i <= ws.length - k + 1; i++) splits(ws.slice(i), k - 1).forEach(r => out.push([ws.slice(0, i).join(' ')].concat(r))); return out; };
+  let lines = [words.join(' ')];
+  for (let k = nl; k >= 1; k--) { const best = splits(words, k).sort((a, b) => Math.max(...a.map(l => l.length)) - Math.max(...b.map(l => l.length)))[0]; if (best) { lines = best; break; } }
+  const longest = Math.max(...lines.map(l => l.length));
+  const fs = Math.max(4, Math.min(11, W / (0.62 * longest), 22 / lines.length));
+  const lh = fs * 1.05, y0 = 26.5 - (lines.length - 1) * lh / 2 + fs * 0.35;
+  const esc2 = s => s.replace(/[<&>"]/g, c => ({'<':'&lt;','&':'&amp;','>':'&gt;','"':'&quot;'}[c]));
+  const txt = lines.map((l, i) => { const nat = 0.62 * fs * l.length; return `<text x="20" y="${(y0 + i * lh).toFixed(2)}" text-anchor="middle" font-family="Arial Narrow,Arial,Helvetica,sans-serif" font-weight="800" font-size="${fs.toFixed(2)}" fill="#FFFFFF"${nat > W ? ` textLength="${W}" lengthAdjust="spacingAndGlyphs"` : ''}>${esc2(l.toUpperCase())}</text>`; }).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 46"><path d="M20 2 L37 7 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V7 Z" fill="${fill}" stroke="#F5C518" stroke-width="2.6" stroke-linejoin="round"/><path d="M9 10.5 H31" stroke="#5BB8F0" stroke-width="1.8"/>${txt}</svg>`;
   return (genCache[name] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
 }
 function crestFor(name, comp){ const s = crestSrc(crestId(name)); if (s) return s; return comp && comp !== 'rugby' ? genCrest(name) : ''; }
