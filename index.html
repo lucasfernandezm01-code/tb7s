@@ -558,7 +558,7 @@ const payState = x => x.bonif ? ['ok','Sin cargo'] : x.pagado ? ['ok','Pagado'] 
 const exTag = x => x.ejemplo ? '<span class="ex">ejemplo</span>' : '';
 function viewAdmin(){
   if (!isAdmin) return '<div class="empty">Esta sección es solo para la organización.</div>';
-  const tabs = [['resumen','Resumen'],['avisos','Avisos'],['insc','Equipos'],['conv','Convocatoria'],['fiesta','Fiesta'],['caja','Caja']];
+  const tabs = [['resumen','Resumen'],['insc','Equipos'],['conv','Convocatoria'],['fiesta','Fiesta'],['caja','Caja'],['avisos','Avisos']];
   let body = '';
   if (dbState === 'off') body = '<div class="empty">No se pudieron cargar los datos. Revisá la conexión y volvé a abrir la sección.</div>';
   else if (adminTab === 'resumen') body = admResumen();
@@ -721,7 +721,7 @@ function admAvisos(){
     <button class="btn primary block" data-act="avsend">Enviar aviso a todos</button></div>
   <section class="stack"><h2 class="sec-title">Activos<small>${act.length}</small></h2>
     ${act.length ? `<div class="list">${act.map(a => `<div class="li"><div class="li-main"><span class="li-t" style="white-space:normal">${esc(a.txt)}</span><span class="li-s">${AV_TYPES[a.tipo] ? AV_TYPES[a.tipo][1] : 'Info'} · ${avAgo(a.at)}${a.hasta ? ' · hasta ' + new Date(a.hasta).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}) : ''}</span></div><div class="li-r"><button class="btn danger" data-act="avdel" data-id="${esc(a.id)}">Quitar</button></div></div>`).join('')}</div>` : '<div class="empty">No hay avisos activos.</div>'}</section>
-  ${old.length ? `<section class="stack"><h2 class="sec-title">Anteriores<small>${old.length}</small></h2><div class="list">${old.map(a => `<div class="li"><div class="li-main"><span class="li-t" style="white-space:normal">${esc(a.txt)}</span><span class="li-s">${avAgo(a.at)}</span></div><div class="li-r"><button class="btn" data-act="avresend" data-id="${esc(a.id)}">Reenviar</button></div></div>`).join('')}</div></section>` : ''}`;
+  ${old.length ? `<section class="stack"><h2 class="sec-title">Anteriores<small>${old.length}</small></h2><div class="list">${old.map(a => `<div class="li"><div class="li-main"><span class="li-t" style="white-space:normal">${esc(a.txt)}</span><span class="li-s">${avAgo(a.at)}</span></div><div class="li-r" style="display:flex;gap:6px"><button class="btn" data-act="avresend" data-id="${esc(a.id)}">Reenviar</button><button class="btn danger" data-act="avrm" data-id="${esc(a.id)}">Borrar</button></div></div>`).join('')}</div></section>` : ''}`;
 }
 async function avSave(mut, okMsg){
   if (!sb || !isAdmin) { toast('Ingresá como organizador.'); return; }
@@ -1033,6 +1033,7 @@ document.addEventListener('click', e => {
   else if (a === 'avtipo') { avDraft.tipo = id; render(); }
   else if (a === 'avsend') { const txt = (document.getElementById('av_txt') || {}).value || ''; avDraft.dura = (document.getElementById('av_dura') || {}).value || '3'; if (!txt.trim()) { toast('Escribí el mensaje.'); return; } avSend(txt, avDraft.tipo, avDraft.dura).then(() => { avDraft = {txt:'', tipo:'imp', dura:'3'}; render(); }); }
   else if (a === 'avdel') arm(b, '¿Quitar?', () => avSave(list => list.map(x => x.id === id ? Object.assign({}, x, {hasta:new Date().toISOString()}) : x), 'Aviso quitado'));
+  else if (a === 'avrm') arm(b, '¿Borrar?', () => avSave(list => list.filter(x => x.id !== id), 'Aviso borrado'));
   else if (a === 'avresend') { const x = (S.avisos || []).find(y => y.id === id); if (x) avSend(x.txt, x.tipo, '3'); }
   else if (a === 'convz') { convZona = id; render(); }
   else if (a === 'newconv') convForm(null);
@@ -1103,6 +1104,7 @@ async function loadAdmin(){
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   if (!adm.fix_arand) fixArand();
+  else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
   else if (A.conv.length && !adm.convfix_2) fixConv2();
 }
