@@ -125,6 +125,22 @@ td.pts{font-family:var(--display);font-weight:800;font-size:15px}
 .tbl-wrap col.c-pos{width:30px} .tbl-wrap col.c-n{width:30px} .tbl-wrap col.c-d{width:38px} .tbl-wrap col.c-p{width:38px} .tbl-wrap col.c-x{width:36px}
 td.team{overflow:hidden;text-overflow:ellipsis}
 
+/* live announcements */
+.avisos{display:grid;gap:0}
+.aviso{--c:var(--sky);background:color-mix(in srgb,var(--c) 16%,var(--surface));border-bottom:1px solid color-mix(in srgb,var(--c) 40%,transparent);box-shadow:inset 4px 0 0 var(--c)}
+.aviso.imp{--c:var(--gold)} .aviso.urg{--c:var(--live)}
+.aviso .wrap{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding-block:10px}
+.av-ic{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:#fff;font-size:15px;line-height:1}
+.aviso.imp .av-ic{color:var(--navy-2)}
+.av-t{font-weight:700;font-size:15px;line-height:1.3;white-space:pre-line;min-width:0;overflow-wrap:anywhere}
+.av-m{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-top:2px}
+.av-x{border:0;background:none;color:var(--muted);font-size:20px;line-height:1;padding:2px 4px}
+.aviso.urg .av-t{color:var(--ink)}
+.aviso.new .av-ic{animation:avpop 1s ease-out 2}
+@keyframes avpop{50%{transform:scale(1.25)}}
+@media (prefers-reduced-motion:reduce){.aviso.new .av-ic{animation:none}}
+.av-prev{border:1px dashed var(--line);border-radius:12px;overflow:hidden}
+
 /* fixture subtabs */
 .subtabs{background:var(--surface);border:1px solid var(--line)}
 .subtabs button{display:flex;align-items:center;justify-content:center;gap:6px}
@@ -408,6 +424,23 @@ const ICON = {
   mapa:'<svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>',
   admin:'<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>'
 };
+const AV_TYPES = {info:['ℹ','Info'], imp:['!','Importante'], urg:['⚠','Urgente']};
+let avHidden = store.get('tb7s-avhide') || [];
+let avSeen = store.get('tb7s-avseen') || [];
+function avActivos(){ const now = Date.now(); return (S.avisos || []).filter(a => !a.hasta || Date.parse(a.hasta) > now).sort((a, b) => b.at.localeCompare(a.at)); }
+function avAgo(iso){ const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : new Date(iso).toLocaleDateString('es-AR', {day:'numeric', month:'short'}); }
+function avisoHtml(a, opts){
+  const ty = AV_TYPES[a.tipo] ? a.tipo : 'info', isNew = opts && opts.isNew;
+  return `<div class="aviso ${ty}${isNew ? ' new' : ''}" role="status"><div class="wrap"><span class="av-ic" aria-hidden="true">${AV_TYPES[ty][0]}</span><div class="av-t">${esc(a.txt)}<span class="av-m">${AV_TYPES[ty][1]} · ${avAgo(a.at)}</span></div>${opts && opts.noX ? '<span></span>' : `<button class="av-x" data-act="avhide" data-id="${esc(a.id)}" aria-label="Ocultar aviso">×</button>`}</div></div>`;
+}
+function avisosHtml(){
+  const list = avActivos().filter(a => !avHidden.includes(a.id)).slice(0, 3);
+  if (!list.length) return '';
+  const html = `<div class="avisos">${list.map(a => avisoHtml(a, {isNew:!avSeen.includes(a.id)})).join('')}</div>`;
+  const ids = list.map(a => a.id).filter(id => !avSeen.includes(id));
+  if (ids.length) { avSeen = avSeen.concat(ids).slice(-50); store.set('tb7s-avseen', avSeen); }
+  return html;
+}
 function header(){
   const ev = S.evento, d = new Date(ev.fecha + 'T00:00:00-03:00');
   const days = Math.ceil((d - Date.now()) / 86400000);
@@ -419,6 +452,7 @@ function header(){
       <div class="side"><span class="count">${cd}</span></div></div>
     <div class="meta-row"><div class="eyebrow"><span>${esc(ev.edicion)}</span><span class="dot"></span><span>${esc(fecha)}</span><span class="dot"></span><span>${esc(ev.sede)}</span></div>${isAdmin && tab !== 'admin' ? `<button class="edit-toggle" data-act="edit" aria-pressed="${editMode}">${editMode ? 'Editando' : 'Editar'}</button>` : `<span class="upd">${esc(upd)}</span>`}</div>
   </div></header><div class="hype" aria-hidden="true"><div class="wrap"><svg viewBox="0 0 600 64"><text x="300" y="54" text-anchor="middle" textLength="596" lengthAdjust="spacingAndGlyphs">TORCUATO BEACH SEVEN</text></svg></div></div><div class="stripe"></div>
+  ${tab !== 'admin' ? avisosHtml() : ''}
   ${S.ejemplo && tab === 'fixture' ? `<div class="notice"><div class="wrap">Fixture de ejemplo. ${isAdmin ? 'Tocá <b>Editar</b> para cargar los datos reales.' : 'Pronto vas a ver los datos oficiales.'}</div></div>` : ''}`;
 }
 function chips(withAll){
@@ -524,12 +558,13 @@ const payState = x => x.bonif ? ['ok','Sin cargo'] : x.pagado ? ['ok','Pagado'] 
 const exTag = x => x.ejemplo ? '<span class="ex">ejemplo</span>' : '';
 function viewAdmin(){
   if (!isAdmin) return '<div class="empty">Esta sección es solo para la organización.</div>';
-  const tabs = [['resumen','Resumen'],['insc','Equipos'],['conv','Convocatoria'],['fiesta','Fiesta'],['caja','Caja']];
+  const tabs = [['resumen','Resumen'],['avisos','Avisos'],['insc','Equipos'],['conv','Convocatoria'],['fiesta','Fiesta'],['caja','Caja']];
   let body = '';
   if (dbState === 'off') body = '<div class="empty">No se pudieron cargar los datos. Revisá la conexión y volvé a abrir la sección.</div>';
   else if (adminTab === 'resumen') body = admResumen();
   else if (adminTab === 'insc') body = admInsc();
   else if (adminTab === 'conv') body = admConv();
+  else if (adminTab === 'avisos') body = admAvisos();
   else if (adminTab === 'fiesta') body = admFiesta();
   else body = admCaja();
   return `<div class="tabs2" role="group">${tabs.map(([k, l]) => `<button data-act="atab" data-id="${k}" aria-pressed="${adminTab === k}">${l}</button>`).join('')}</div>${body}`;
@@ -673,6 +708,35 @@ async function conv2eq(x){
   const comp = x.dep || 'rugby';
   try { await db.collection(COL.insc).add({club:x.club, comp, provincia:x.prov || '', contacto:x.tel || '', tel:'', jugadores:x.integ || null, monto:A.cfg.precioInsc || 0, sena:null, aloj:x.aloj || 'No', pagado:false, bonif:false, notas:x.com || '', ejemplo:false}); toast(x.club + ' pasó a Equipos'); }
   catch (e) { toast('No se pudo pasar a Equipos.'); }
+}
+let avDraft = {txt:'', tipo:'imp', dura:'3'};
+function admAvisos(){
+  const act = avActivos(), old = (S.avisos || []).filter(a => !act.includes(a)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
+  const prev = avDraft.txt.trim() ? avisoHtml({id:'prev', txt:avDraft.txt.trim(), tipo:avDraft.tipo, at:new Date().toISOString()}, {noX:true}) : '';
+  return `<div class="panel-card"><h2 class="sec-title">Nuevo aviso</h2><p class="legend" style="margin:-4px 0 0">Le aparece arriba a todos al instante, en todas las secciones.</p>
+    <div class="fld"><label for="av_txt">Mensaje</label><textarea id="av_txt" maxlength="200" placeholder="Ej: La final de Rugby se pasa a las 18:00 en Cancha 1">${esc(avDraft.txt)}</textarea></div>
+    <div class="fld"><label>Tipo</label><div class="seg" role="group">${Object.entries(AV_TYPES).map(([k, v]) => `<button data-act="avtipo" data-id="${k}" aria-pressed="${avDraft.tipo === k}">${v[1]}</button>`).join('')}</div></div>
+    <div class="fld"><label for="av_dura">Se muestra durante</label><select id="av_dura">${[['1','1 hora'],['3','3 horas'],['8','8 horas'],['24','Todo el día'],['0','Hasta que lo quite']].map(([v, l]) => `<option value="${v}" ${avDraft.dura === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    ${prev ? `<div class="fld"><label>Así lo van a ver</label><div class="av-prev">${prev}</div></div>` : ''}
+    <button class="btn primary block" data-act="avsend">Enviar aviso a todos</button></div>
+  <section class="stack"><h2 class="sec-title">Activos<small>${act.length}</small></h2>
+    ${act.length ? `<div class="list">${act.map(a => `<div class="li"><div class="li-main"><span class="li-t" style="white-space:normal">${esc(a.txt)}</span><span class="li-s">${AV_TYPES[a.tipo] ? AV_TYPES[a.tipo][1] : 'Info'} · ${avAgo(a.at)}${a.hasta ? ' · hasta ' + new Date(a.hasta).toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}) : ''}</span></div><div class="li-r"><button class="btn danger" data-act="avdel" data-id="${esc(a.id)}">Quitar</button></div></div>`).join('')}</div>` : '<div class="empty">No hay avisos activos.</div>'}</section>
+  ${old.length ? `<section class="stack"><h2 class="sec-title">Anteriores<small>${old.length}</small></h2><div class="list">${old.map(a => `<div class="li"><div class="li-main"><span class="li-t" style="white-space:normal">${esc(a.txt)}</span><span class="li-s">${avAgo(a.at)}</span></div><div class="li-r"><button class="btn" data-act="avresend" data-id="${esc(a.id)}">Reenviar</button></div></div>`).join('')}</div></section>` : ''}`;
+}
+async function avSave(mut, okMsg){
+  if (!sb || !isAdmin) { toast('Ingresá como organizador.'); return; }
+  try {
+    const {data:row, error:e1} = await sb.from('tb_state').select('data').eq('id', 1).maybeSingle(); if (e1) throw e1;
+    const st = clone(row && row.data ? row.data : BASE); st.avisos = mut(st.avisos || []).slice(-40);
+    const now = new Date().toISOString();
+    const {error} = await sb.from('tb_state').upsert({id:1, data:st, updated_at:now}); if (error) throw error;
+    lastUpd = now; setBase(st); toast(okMsg);
+  } catch (e) { toast('No se pudo guardar el aviso. Revisá la conexión.'); }
+}
+function avSend(txt, tipo, dura){
+  const h = Number(dura) || 0, now = Date.now();
+  const a = {id:'a' + now.toString(36), txt:txt.trim(), tipo, at:new Date(now).toISOString(), hasta:h ? new Date(now + h * 3600000).toISOString() : null};
+  return avSave(list => list.concat(a), 'Aviso enviado a todos');
 }
 function admFiesta(){
   const list = A.fiesta.slice().sort((a,b) => (b.fecha || '').localeCompare(a.fecha || ''));
@@ -965,6 +1029,11 @@ document.addEventListener('click', e => {
   else if (a === 'noex') { draft.sec.ejemplo = false; commit(); toast('Aviso quitado. Publicá para aplicarlo.'); }
   else if (a === 'csv') exportCsv(id);
   else if (a === 'convf') { convFilter = id; render(); }
+  else if (a === 'avhide') { avHidden = avHidden.concat(id).slice(-50); store.set('tb7s-avhide', avHidden); render(); }
+  else if (a === 'avtipo') { avDraft.tipo = id; render(); }
+  else if (a === 'avsend') { const txt = (document.getElementById('av_txt') || {}).value || ''; avDraft.dura = (document.getElementById('av_dura') || {}).value || '3'; if (!txt.trim()) { toast('Escribí el mensaje.'); return; } avSend(txt, avDraft.tipo, avDraft.dura).then(() => { avDraft = {txt:'', tipo:'imp', dura:'3'}; render(); }); }
+  else if (a === 'avdel') arm(b, '¿Quitar?', () => avSave(list => list.map(x => x.id === id ? Object.assign({}, x, {hasta:new Date().toISOString()}) : x), 'Aviso quitado'));
+  else if (a === 'avresend') { const x = (S.avisos || []).find(y => y.id === id); if (x) avSend(x.txt, x.tipo, '3'); }
   else if (a === 'convz') { convZona = id; render(); }
   else if (a === 'newconv') convForm(null);
   else if (a === 'editconv') convForm(A.conv.find(x => x.id === id));
@@ -998,6 +1067,11 @@ document.addEventListener('pointerup', () => {
   else { mapSel = mapSel === d.id ? null : d.id; render(); }
 });
 document.addEventListener('pointercancel', () => { drag = null; });
+document.addEventListener('input', e => {
+  if (e.target.id === 'av_txt') { avDraft.txt = e.target.value; const pv = document.querySelector('.av-prev'); const html = avDraft.txt.trim() ? avisoHtml({id:'prev', txt:avDraft.txt.trim(), tipo:avDraft.tipo, at:new Date().toISOString()}, {noX:true}) : '';
+    if (pv && html) pv.innerHTML = html; else if (!!pv !== !!html) { const pos = e.target.selectionStart; render(); const ta = document.getElementById('av_txt'); if (ta) { ta.focus(); try { ta.setSelectionRange(pos, pos); } catch (er) {} } } }
+});
+document.addEventListener('change', e => { if (e.target.id === 'av_dura') avDraft.dura = e.target.value; });
 document.addEventListener('submit', e => { if (e.target.id === 'frm' && formCtx) { e.preventDefault(); formCtx.onSave(readForm()); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr.trow')) { e.preventDefault(); e.target.click(); } });
 
@@ -1110,7 +1184,7 @@ render();
   setInterval(loadState, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadState(); if (isAdmin) loadAdmin(); } });
 })();
-setInterval(() => { if (tab === 'agenda' && sheet.hidden) render(); }, 60000);
+setInterval(() => { if (sheet.hidden && (tab === 'agenda' || (S.avisos || []).length) && !(document.activeElement && document.activeElement.id === 'av_txt')) render(); }, 60000);
 try { window.matchMedia('(min-width:521px)').addEventListener('change', () => { if (tab === 'tabla') render(); }); } catch (e) {}
 })();
 </script>
