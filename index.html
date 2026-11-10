@@ -356,7 +356,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261110175237';
+const APP_V = '20261110175419';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -727,14 +727,14 @@ function admResumen(){
     <div class="bar" style="height:14px"><i style="width:${pct.toFixed(1)}%;background:var(--sun)"></i></div>
     <div class="row2"><span>Recaudado</span><b>${$$(t.fi)}</b></div><div class="row2"><span>Quedan</span><b>${Math.max(0, cap - t.fq)} entradas</b></div>
   </div>
-  <div class="panel-card"><h2 class="sec-title">Organización<small>${A.equipo.length} áreas</small></h2>
-    ${A.equipo.length ? A.equipo.map(a => `<div class="row2"><span>${esc(a.area)}${a.tareas ? `<br><span class="muted" style="font-size:12px">${esc(a.tareas)}</span>` : ''}</span><b style="text-align:right">${esc(a.resp)}</b></div>`).join('') : '<span class="muted" style="font-size:14px">Cargá las áreas y sus responsables.</span>'}
-    <button class="btn" data-act="equipo">Editar áreas y responsables</button></div>
   <div class="panel-card"><h2 class="sec-title">Accesos al Admin<small>${admins.length} personas</small></h2>
     ${admins.map(x => `<div class="row2"><span>${esc(x)}</span>${me && me.email && x === me.email.toLowerCase() ? '<b class="muted" style="font-weight:600">vos</b>' : ''}</div>`).join('')}
     <button class="btn" data-act="access">Editar accesos</button></div>
   <div class="panel-card"><h2 class="sec-title">Ingresos por origen</h2>${barList(ins)}</div>
   <div class="panel-card"><h2 class="sec-title">Egresos por rubro</h2>${barList(outs)}</div>
+  <div class="panel-card"><h2 class="sec-title">Organización<small>${A.equipo.length} áreas</small></h2>
+    ${A.equipo.length ? A.equipo.map(a => `<div class="row2"><span>${esc(a.area)}${a.tareas ? `<br><span class="muted" style="font-size:12px">${esc(a.tareas)}</span>` : ''}</span><b style="text-align:right">${esc(a.resp)}</b></div>`).join('') : '<span class="muted" style="font-size:14px">Cargá las áreas y sus responsables.</span>'}
+    <button class="btn" data-act="equipo">Editar áreas y responsables</button></div>
   <div class="toolbar"><button class="btn" data-act="cfg">Ajustes: capacidad y precios</button>${hasEx ? '<button class="btn danger" data-act="clearex" id="clearex">Borrar datos de ejemplo</button>' : ''}${S.ejemplo ? '<button class="btn" data-act="noex">Quitar aviso de fixture de ejemplo</button>' : ''}</div>`;
 }
 function admInsc(){
