@@ -356,7 +356,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261110175049';
+const APP_V = '20261110175237';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -851,6 +851,19 @@ async function installCrests(adm){
     lastUpd = now; setBase(st); toast('Escudo de ' + todo.map(c => c.name).join(', ') + ' cargado');
   } catch (e) {}
 }
+async function swapExample(key, oldName, match, fallback){
+  try {
+    const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:key, data:{at:new Date().toISOString()}}); if (e0) return;
+    const ins = A.insc.find(i => norm(i.club).includes(match)), NEW = ins ? ins.club : fallback;
+    const {data:row} = await sb.from('tb_state').select('data').eq('id', 1).maybeSingle();
+    const st = clone(row && row.data ? row.data : BASE), sw = s => s === oldName ? NEW : s;
+    st.comps.forEach(c => c.grupos.forEach(g => { g.equipos = g.equipos.map(sw); }));
+    st.partidos.forEach(m => { m.l = sw(m.l); m.v = sw(m.v); });
+    const now = new Date().toISOString();
+    const {error} = await sb.from('tb_state').upsert({id:1, data:st, updated_at:now});
+    if (!error) { lastUpd = now; setBase(st); }
+  } catch (e) {}
+}
 async function seedConv(){
   toast('Cargando clubes…');
   try {
@@ -1264,7 +1277,7 @@ async function loadAdmin(){
   A.cfg = Object.assign({capacidad:0, precioEntrada:0, precioInsc:0}, adm.config || {});
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
-  installCrests(adm);
+  installCrests(adm).then(() => { if (!adm.ej_bmza) swapExample('ej_bmza', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
