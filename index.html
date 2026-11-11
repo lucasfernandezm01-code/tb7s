@@ -143,6 +143,10 @@ td.team{overflow:hidden;text-overflow:ellipsis}
 
 .aloj-row{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
 .aloj-row b{color:var(--ink)}
+.prev-row{grid-template-columns:1fr auto}
+.prev-ctrl{display:flex;align-items:center;gap:6px}
+.prev-ctrl .btn{min-width:42px;height:42px;padding:0;font-size:18px}
+.prev-ctrl input{width:72px;height:42px;text-align:center;font-family:var(--display);font-weight:800;font-size:20px;border:1px solid var(--line);background:var(--bg);border-radius:10px}
 /* mi equipo */
 .mine-card{background:var(--navy);color:#fff;border-radius:14px;padding:12px 14px;display:grid;gap:10px;box-shadow:inset 0 -4px 0 var(--gold)}
 .mine-card .link-btn{color:var(--gold);padding:4px 0}
@@ -358,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261111132755';
+const APP_V = '20261111142223';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -453,7 +457,7 @@ function genCrest(name){
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 46"><path d="M20 2 L37 7 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V7 Z" fill="${fill}" stroke="#F5C518" stroke-width="2.6" stroke-linejoin="round"/><path d="M9 10.5 H31" stroke="#5BB8F0" stroke-width="1.8"/>${txt}</svg>`;
   return (genCache[name] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
 }
-function crestFor(name, comp){ const s = crestSrc(crestId(name)); if (s) return s; return comp && comp !== 'rugby' ? genCrest(name) : ''; }
+function crestFor(name, comp){ if (comp === 'futbol') return ''; const s = crestSrc(crestId(name)); if (s) return s; return comp === 'hockey' ? genCrest(name) : ''; }
 function crest(name, comp){ const s = crestFor(name, comp); return s ? `<img class="crest" src="${s}" alt="">` : ''; }
 function standings(c, g){
   const rows = {};
@@ -677,16 +681,17 @@ function viewMapa(){
 
 /* ---------- admin data (db, editors only) ---------- */
 let db = null, dbState = 'idle';
-const A = {insc:[], fiesta:[], caja:[], conv:[], equipo:[], cfg:{capacidad:0, precioEntrada:0, precioInsc:0}};
+const A = {prev:{p1:0, p2:0, p3:0}, insc:[], fiesta:[], caja:[], conv:[], equipo:[], cfg:{capacidad:0, precioEntrada:0, precioInsc:0}};
 const COL = {insc:'adm/v1/insc', fiesta:'adm/v1/fiesta', caja:'adm/v1/caja', conv:'adm/v1/conv'};
 const CATS_OUT = ['Producción','Seguridad','Sonido y escenario','Premios','Arbitraje','Comida y bebida','Alojamiento','Comunicación','Otros egresos'];
 const CATS_IN = ['Sponsors','Buffet','Merchandising','Donaciones','Otros ingresos'];
 const MEDIOS = ['Transferencia','Efectivo','Mercado Pago'];
+const PREV = [{k:'p1', n:'Preventa 1', precio:15000}, {k:'p2', n:'Preventa 2', precio:20000}, {k:'p3', n:'Preventa 3', precio:25000}];
 function totals(){
   const ip = A.insc.reduce((s,x) => s + cobrado(x), 0);
   const ipend = A.insc.reduce((s,x) => s + (x.bonif ? 0 : Math.max(0, (+x.monto || 0) - cobrado(x))), 0);
-  const fq = A.fiesta.reduce((s,x) => s + (+x.cantidad || 0), 0);
-  const fi = A.fiesta.reduce((s,x) => s + (+x.cantidad || 0) * (+x.precio || 0), 0);
+  const fq = PREV.reduce((s, p) => s + (+A.prev[p.k] || 0), 0);
+  const fi = PREV.reduce((s, p) => s + (+A.prev[p.k] || 0) * p.precio, 0);
   const mi = A.caja.filter(x => x.tipo === 'Ingreso').reduce((s,x) => s + (+x.monto || 0), 0);
   const mo = A.caja.filter(x => x.tipo === 'Egreso').reduce((s,x) => s + (+x.monto || 0), 0);
   return {ip, ipend, fq, fi, mi, mo, ing: ip + fi + mi, egr: mo};
@@ -753,8 +758,8 @@ function admInsc(){
     return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${jug(items)} personas · ${$$(cobr)}</small></h2>
     ${c.id === 'rugby' || items.some(x => x.aloj && x.aloj !== 'No') ? `<div class="aloj-row">${['Piso 9', 'Comunitario'].map(k => { const it = items.filter(x => x.aloj === k); return `<span><b>${k}</b> <b class="num">${jug(it)}</b> personas · ${it.length} ${it.length === 1 ? 'equipo' : 'equipos'}</span>`; }).join('')}</div>` : ''}
     ${items.length ? `<div class="list">${items.map(x => {
-    const cs = crestFor(x.club, x.comp);
-    return `<div class="li wc"><button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button><button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${[c ? c.nombre : x.comp, x.provincia, x.jugadores ? x.jugadores + ' jug.' : '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.contacto].filter(Boolean).map(esc).join(' · ')}</span></button>
+    const cs = crestFor(x.club, x.comp), noCrest = x.comp === 'futbol';
+    return `<div class="li${noCrest ? '' : ' wc'}">${noCrest ? '' : `<button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button>`}<button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${[c ? c.nombre : x.comp, x.provincia, x.jugadores ? x.jugadores + ' jug.' : '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.contacto].filter(Boolean).map(esc).join(' · ')}</span></button>
     <div class="li-r"><span class="amt">${$$(x.monto)}</span><button class="pill ${payState(x)[0]}" data-act="pay" data-id="${x.id}">${payState(x)[1]}</button>${!x.pagado && !x.bonif && +x.sena > 0 ? `<span class="li-s num">Pagó ${$$(cobrado(x))} · <b style="color:var(--bad)">Resta ${$$(Math.max(0, (+x.monto || 0) - cobrado(x)))}</b></span>` : ''}</div></div>`;
     }).join('')}</div>` : '<div class="empty">Sin equipos inscriptos.</div>'}</section>`; }).join('') : '<div class="empty">Todavía no hay equipos inscriptos. Tocá <b>Inscribir equipo</b> para cargar el primero.</div>'}`;
 }
@@ -917,13 +922,16 @@ function avSend(txt, tipo, dura){
   return avSave(list => list.concat(a), 'Aviso enviado a todos');
 }
 function admFiesta(){
-  const list = A.fiesta.slice().sort((a,b) => (b.fecha || '').localeCompare(a.fecha || ''));
   const t = totals();
-  const byMedio = {}; list.forEach(x => byMedio[x.medio || 'Otro'] = (byMedio[x.medio || 'Otro'] || 0) + (+x.cantidad || 0) * (+x.precio || 0));
-  return `<div class="kpis"><div class="kpi"><span>Vendidas</span><b class="num">${t.fq}</b></div><div class="kpi"><span>Quedan</span><b class="num">${Math.max(0, (+A.cfg.capacidad || 0) - t.fq)}</b></div><div class="kpi pos"><span>Recaudado</span><b class="num">${$$(t.fi)}</b></div></div>
-  <div class="toolbar"><button class="btn primary" data-act="newfiesta">+ Registrar venta</button><button class="btn ghost" data-act="csv" data-id="fiesta">Exportar CSV</button></div>
-  ${list.length ? `<div class="list">${list.map(x => `<div class="li"><button class="li-main" data-act="editfiesta" data-id="${x.id}"><span class="li-t">${esc(x.nombre)}${exTag(x)}</span><span class="li-s">${esc(x.cantidad)} × ${$$(x.precio)} · ${esc(x.medio)}${x.tanda ? ' · ' + esc(x.tanda) : ''}${x.vendedor ? ' · vendió ' + esc(x.vendedor) : ''}</span></button><div class="li-r"><span class="amt in">${$$((+x.cantidad || 0) * (+x.precio || 0))}</span><span class="li-s">${esc(fmtDate(x.fecha))}</span></div></div>`).join('')}</div>
-  <div class="panel-card"><h2 class="sec-title">Por medio de pago</h2>${barList(byMedio)}</div>` : '<div class="empty">Sin ventas registradas. Cargá cada venta con <b>Registrar venta</b>.</div>'}`;
+  return `<div class="kpis" style="grid-template-columns:1fr 1fr"><div class="kpi"><span>Entradas vendidas</span><b class="num">${t.fq}</b></div><div class="kpi pos"><span>Recaudado</span><b class="num">${$$(t.fi)}</b></div></div>
+  <div class="list">${PREV.map(p => `<div class="li prev-row"><div class="li-main"><span class="li-t">${p.n}</span><span class="li-s num">${$$(p.precio)} · ${$$((+A.prev[p.k] || 0) * p.precio)}</span></div>
+    <div class="prev-ctrl"><button class="btn" data-act="prevadd" data-id="${p.k}" data-d="-1" aria-label="Restar una">−</button><input id="prev_${p.k}" type="number" inputmode="numeric" min="0" value="${+A.prev[p.k] || 0}" aria-label="Entradas ${p.n}"><button class="btn" data-act="prevadd" data-id="${p.k}" data-d="1" aria-label="Sumar una">+</button></div></div>`).join('')}</div>
+  <p class="legend" style="margin:0">Escribí la cantidad o usá + y −. Se guarda solo.</p>`;
+}
+async function savePrev(k, n){
+  n = Math.max(0, Math.round(+n || 0)); A.prev = Object.assign({}, A.prev, {[k]:n});
+  try { const {error} = await sb.from('adm_docs').upsert({col:'adm', id:'preventas', data:A.prev, updated_at:new Date().toISOString()}); if (error) throw error; render(); }
+  catch (e) { toast('No se pudo guardar. Revisá la conexión.'); }
 }
 function admCaja(){
   const list = A.caja.slice().sort((a,b) => (b.fecha || '').localeCompare(a.fecha || ''));
@@ -1212,6 +1220,7 @@ document.addEventListener('click', e => {
   else if (a === 'clearex') arm(b, '¿Borrar todos los de ejemplo?', clearExamples);
   else if (a === 'noex') { draft.sec.ejemplo = false; commit(); toast('Aviso quitado. Publicá para aplicarlo.'); }
   else if (a === 'csv') exportCsv(id);
+  else if (a === 'prevadd') savePrev(id, (+A.prev[id] || 0) + Number(b.dataset.d));
   else if (a === 'convf') { convFilter = id; render(); }
   else if (a === 'avhide') { avHidden = avHidden.concat(id).slice(-50); store.set('tb7s-avhide', avHidden); render(); }
   else if (a === 'avtipo') { avDraft.tipo = id; render(); }
@@ -1256,7 +1265,8 @@ document.addEventListener('input', e => {
   if (e.target.id === 'av_txt') { avDraft.txt = e.target.value; const pv = document.querySelector('.av-prev'); const html = avDraft.txt.trim() ? avisoHtml({id:'prev', txt:avDraft.txt.trim(), tipo:avDraft.tipo, at:new Date().toISOString()}, {noX:true}) : '';
     if (pv && html) pv.innerHTML = html; else if (!!pv !== !!html) { const pos = e.target.selectionStart; render(); const ta = document.getElementById('av_txt'); if (ta) { ta.focus(); try { ta.setSelectionRange(pos, pos); } catch (er) {} } } }
 });
-document.addEventListener('change', e => { if (e.target.id === 'av_dura') avDraft.dura = e.target.value; if (e.target.id === 'mine_sel' && e.target.value) setMine(comp, e.target.value); });
+document.addEventListener('change', e => {
+  if (e.target.id && e.target.id.startsWith('prev_')) savePrev(e.target.id.slice(5), e.target.value); if (e.target.id === 'av_dura') avDraft.dura = e.target.value; if (e.target.id === 'mine_sel' && e.target.value) setMine(comp, e.target.value); });
 document.addEventListener('submit', e => { if (e.target.id === 'frm' && formCtx) { e.preventDefault(); formCtx.onSave(readForm()); } });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr.trow')) { e.preventDefault(); e.target.click(); } });
 
@@ -1285,6 +1295,7 @@ async function loadAdmin(){
   const adm = ADM['adm'] || {};
   A.equipo = (adm.equipo && adm.equipo.areas) || [];
   A.cfg = Object.assign({capacidad:0, precioEntrada:0, precioInsc:0}, adm.config || {});
+  A.prev = Object.assign({p1:0, p2:0, p3:0}, adm.preventas || {});
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   installCrests(adm).then(() => { if (!adm.ej_bmza) swapExample('ej_bmza', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); });
