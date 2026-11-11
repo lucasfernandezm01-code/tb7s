@@ -356,7 +356,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261111124723';
+const APP_V = '20261111131132';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -739,12 +739,19 @@ function admResumen(){
 }
 function admInsc(){
   const list = A.insc.slice().sort((a,b) => (a.comp || '').localeCompare(b.comp || '') || (a.club || '').localeCompare(b.club || ''));
-  return `<p class="legend" style="margin:0">Tocá el cuadradito de cada club para subir su escudo. Usá el mismo nombre del club en los grupos para que aparezca en fixture y tabla.</p><div class="toolbar"><button class="btn primary" data-act="newinsc">+ Inscribir equipo</button><button class="btn ghost" data-act="csv" data-id="insc">Exportar CSV</button></div>
+  const jug = arr => arr.reduce((s, x) => s + (+x.jugadores || 0), 0);
+  const total = jug(list), sinDato = list.filter(x => !(+x.jugadores)).length;
+  const alojs = ['Piso 9', 'Comunitario'].map(k => { const it = list.filter(x => x.aloj === k); return {k, n:jug(it), eq:it.length}; });
+  const resumen = list.length ? `<div class="panel-card"><h2 class="sec-title">Personas anotadas<small>${list.length} equipos</small></h2>
+    <div class="kpis" style="grid-template-columns:repeat(${S.comps.length + 1},1fr)"><div class="kpi pos"><span>Total</span><b class="num">${total}</b></div>${S.comps.map(c => `<div class="kpi"><span>${esc(c.nombre.split(' ')[0])}</span><b class="num">${jug(list.filter(x => x.comp === c.id))}</b></div>`).join('')}</div>
+    <div class="kpis" style="grid-template-columns:repeat(2,1fr)">${alojs.map(a => `<div class="kpi"><span>${a.k}</span><b class="num">${a.n}</b><span style="text-transform:none;letter-spacing:0;font-weight:500">${a.eq} ${a.eq === 1 ? 'equipo' : 'equipos'}</span></div>`).join('')}</div>
+    ${sinDato ? `<p class="legend" style="margin:0">${sinDato} ${sinDato === 1 ? 'equipo no tiene' : 'equipos no tienen'} cargada la cantidad de jugadores: no suman al total.</p>` : ''}</div>` : '';
+  return `${resumen}<p class="legend" style="margin:0">Tocá el cuadradito de cada club para subir su escudo. Usá el mismo nombre del club en los grupos para que aparezca en fixture y tabla.</p><div class="toolbar"><button class="btn primary" data-act="newinsc">+ Inscribir equipo</button><button class="btn ghost" data-act="csv" data-id="insc">Exportar CSV</button></div>
   ${list.length ? S.comps.map(c => { const items = list.filter(x => x.comp === c.id); const cobr = items.reduce((s, x) => s + cobrado(x), 0);
-    return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${$$(cobr)}</small></h2>
+    return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${jug(items)} personas · ${$$(cobr)}</small></h2>
     ${items.length ? `<div class="list">${items.map(x => {
     const cs = crestFor(x.club, x.comp);
-    return `<div class="li wc"><button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button><button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${esc(c ? c.nombre : x.comp)} · ${x.provincia ? esc(x.provincia) + ' · ' : ''}${x.jugadores ? esc(x.jugadores) + ' jug.' : ''}${x.aloj && x.aloj !== 'No' ? ' · ' + esc(x.aloj) : ''}${x.contacto ? ' · ' + esc(x.contacto) : ''}</span></button>
+    return `<div class="li wc"><button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button><button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${[c ? c.nombre : x.comp, x.provincia, x.jugadores ? x.jugadores + ' jug.' : '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.contacto].filter(Boolean).map(esc).join(' · ')}</span></button>
     <div class="li-r"><span class="amt">${$$(x.monto)}</span><button class="pill ${payState(x)[0]}" data-act="pay" data-id="${x.id}">${payState(x)[1]}</button>${!x.pagado && !x.bonif && +x.sena > 0 ? `<span class="li-s num">Pagó ${$$(cobrado(x))} · <b style="color:var(--bad)">Resta ${$$(Math.max(0, (+x.monto || 0) - cobrado(x)))}</b></span>` : ''}</div></div>`;
     }).join('')}</div>` : '<div class="empty">Sin equipos inscriptos.</div>'}</section>`; }).join('') : '<div class="empty">Todavía no hay equipos inscriptos. Tocá <b>Inscribir equipo</b> para cargar el primero.</div>'}`;
 }
