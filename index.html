@@ -358,7 +358,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261111132234';
+const APP_V = '20261111132755';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -721,6 +721,8 @@ function admResumen(){
   const ins = {'Inscripciones': t.ip, 'Entradas fiesta': t.fi}; A.caja.filter(x => x.tipo === 'Ingreso').forEach(x => ins[x.categoria || 'Otros ingresos'] = (ins[x.categoria || 'Otros ingresos'] || 0) + (+x.monto || 0));
   const hasEx = ['insc','fiesta','caja'].some(k => A[k].some(x => x.ejemplo));
   return `<div class="kpis"><div class="kpi pos"><span>Ingresos</span><b class="num">${$$(t.ing)}</b></div><div class="kpi neg"><span>Egresos</span><b class="num">${$$(t.egr)}</b></div><div class="kpi ${saldo >= 0 ? 'pos' : 'neg'}"><span>Saldo</span><b class="num">${$$(saldo)}</b></div></div>
+  <div class="panel-card"><h2 class="sec-title">Ingresos por origen</h2>${barList(ins)}</div>
+  <div class="panel-card"><h2 class="sec-title">Egresos por rubro</h2>${barList(outs)}</div>
   <div class="panel-card"><h2 class="sec-title">Equipos<small>${nPag} de ${A.insc.length} pagaron</small></h2>
     <div class="row2"><span>Cobrado</span><b>${$$(t.ip)}</b></div><div class="row2"><span>Pendiente de cobro</span><b style="color:var(--bad)">${$$(t.ipend)}</b></div>
     ${S.comps.map(c => { const n = A.insc.filter(x => x.comp === c.id).length; return `<div class="row2"><span class="muted">${esc(c.nombre)}</span><b>${n} equipos</b></div>`; }).join('')}
@@ -729,14 +731,12 @@ function admResumen(){
     <div class="bar" style="height:14px"><i style="width:${pct.toFixed(1)}%;background:var(--sun)"></i></div>
     <div class="row2"><span>Recaudado</span><b>${$$(t.fi)}</b></div><div class="row2"><span>Quedan</span><b>${Math.max(0, cap - t.fq)} entradas</b></div>
   </div>
-  <div class="panel-card"><h2 class="sec-title">Accesos al Admin<small>${admins.length} personas</small></h2>
-    ${admins.map(x => `<div class="row2"><span>${esc(x)}</span>${me && me.email && x === me.email.toLowerCase() ? '<b class="muted" style="font-weight:600">vos</b>' : ''}</div>`).join('')}
-    <button class="btn" data-act="access">Editar accesos</button></div>
-  <div class="panel-card"><h2 class="sec-title">Ingresos por origen</h2>${barList(ins)}</div>
-  <div class="panel-card"><h2 class="sec-title">Egresos por rubro</h2>${barList(outs)}</div>
   <div class="panel-card"><h2 class="sec-title">Organización<small>${A.equipo.length} áreas</small></h2>
     ${A.equipo.length ? A.equipo.map(a => `<div class="row2"><span>${esc(a.area)}${a.tareas ? `<br><span class="muted" style="font-size:12px">${esc(a.tareas)}</span>` : ''}</span><b style="text-align:right">${esc(a.resp)}</b></div>`).join('') : '<span class="muted" style="font-size:14px">Cargá las áreas y sus responsables.</span>'}
     <button class="btn" data-act="equipo">Editar áreas y responsables</button></div>
+  <div class="panel-card"><h2 class="sec-title">Accesos al Admin<small>${admins.length} personas</small></h2>
+    ${admins.map(x => `<div class="row2"><span>${esc(x)}</span>${me && me.email && x === me.email.toLowerCase() ? '<b class="muted" style="font-weight:600">vos</b>' : ''}</div>`).join('')}
+    <button class="btn" data-act="access">Editar accesos</button></div>
   <div class="toolbar"><button class="btn" data-act="cfg">Ajustes: capacidad y precios</button>${hasEx ? '<button class="btn danger" data-act="clearex" id="clearex">Borrar datos de ejemplo</button>' : ''}${S.ejemplo ? '<button class="btn" data-act="noex">Quitar aviso de fixture de ejemplo</button>' : ''}</div>`;
 }
 function admInsc(){
