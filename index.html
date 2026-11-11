@@ -141,6 +141,8 @@ td.team{overflow:hidden;text-overflow:ellipsis}
 @media (prefers-reduced-motion:reduce){.aviso.new .av-ic{animation:none}}
 .av-prev{border:1px dashed var(--line);border-radius:12px;overflow:hidden}
 
+.aloj-row{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.aloj-row b{color:var(--ink)}
 /* mi equipo */
 .mine-card{background:var(--navy);color:#fff;border-radius:14px;padding:12px 14px;display:grid;gap:10px;box-shadow:inset 0 -4px 0 var(--gold)}
 .mine-card .link-btn{color:var(--gold);padding:4px 0}
@@ -356,7 +358,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261111131132';
+const APP_V = '20261111132234';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -749,6 +751,7 @@ function admInsc(){
   return `${resumen}<p class="legend" style="margin:0">Tocá el cuadradito de cada club para subir su escudo. Usá el mismo nombre del club en los grupos para que aparezca en fixture y tabla.</p><div class="toolbar"><button class="btn primary" data-act="newinsc">+ Inscribir equipo</button><button class="btn ghost" data-act="csv" data-id="insc">Exportar CSV</button></div>
   ${list.length ? S.comps.map(c => { const items = list.filter(x => x.comp === c.id); const cobr = items.reduce((s, x) => s + cobrado(x), 0);
     return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${jug(items)} personas · ${$$(cobr)}</small></h2>
+    ${c.id === 'rugby' || items.some(x => x.aloj && x.aloj !== 'No') ? `<div class="aloj-row">${['Piso 9', 'Comunitario'].map(k => { const it = items.filter(x => x.aloj === k); return `<span><b>${k}</b> <b class="num">${jug(it)}</b> personas · ${it.length} ${it.length === 1 ? 'equipo' : 'equipos'}</span>`; }).join('')}</div>` : ''}
     ${items.length ? `<div class="list">${items.map(x => {
     const cs = crestFor(x.club, x.comp);
     return `<div class="li wc"><button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button><button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${[c ? c.nombre : x.comp, x.provincia, x.jugadores ? x.jugadores + ' jug.' : '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.contacto].filter(Boolean).map(esc).join(' · ')}</span></button>
