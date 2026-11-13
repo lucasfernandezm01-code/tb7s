@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261113105656';
+const APP_V = '20261113105917';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -902,6 +902,34 @@ async function convAdds(adm){
   }
   return n;
 }
+/* Mientras el fixture sea de ejemplo, los equipos inscriptos van ocupando el lugar de los equipos inventados. */
+const EX_SLOTS = {futbol:['CASI', 'Newman', 'Regatas', 'Hindú']};
+async function syncExample(){
+  if (!S.ejemplo) return;
+  try {
+    const {data:row} = await sb.from('tb_state').select('data').eq('id', 1).maybeSingle();
+    const st = clone(row && row.data ? row.data : BASE); if (!st.ejemplo) return;
+    let changed = false;
+    for (const [cid, slots] of Object.entries(EX_SLOTS)) {
+      const c = st.comps.find(x => x.id === cid); if (!c || !c.grupos.length) continue;
+      const inGroups = () => c.grupos.flatMap(g => g.equipos);
+      const regs = A.insc.filter(i => i.comp === cid && i.club).map(i => i.club);
+      for (const club of regs) {
+        if (inGroups().some(e => norm(e) === norm(club))) continue;
+        const free = slots.find(s => inGroups().includes(s) && !regs.some(r => norm(r) === norm(s)));
+        if (free) {
+          c.grupos.forEach(g => { g.equipos = g.equipos.map(e => e === free ? club : e); });
+          st.partidos.forEach(m => { if (m.c === cid) { if (m.l === free) m.l = club; if (m.v === free) m.v = club; } });
+        } else c.grupos[c.grupos.length - 1].equipos.push(club);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    const now = new Date().toISOString();
+    const {error} = await sb.from('tb_state').upsert({id:1, data:st, updated_at:now});
+    if (!error) { lastUpd = now; setBase(st); }
+  } catch (e) {}
+}
 async function seedConv(){
   toast('Cargando clubes…');
   try {
@@ -1329,7 +1357,7 @@ async function loadAdmin(){
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   if (A.conv.length && CONV_ADD.some(g => !adm[g.key])) convAdds(adm).then(n => { if (n) loadAdmin(); });
-  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); });
+  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); await syncExample(); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
