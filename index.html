@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261112233528';
+const APP_V = '20261113105356';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -1329,7 +1329,7 @@ async function loadAdmin(){
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   if (A.conv.length && CONV_ADD.some(g => !adm[g.key])) convAdds(adm).then(n => { if (n) loadAdmin(); });
-  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); });
+  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
