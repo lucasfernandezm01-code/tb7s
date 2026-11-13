@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261113145746';
+const APP_V = '20261113150112';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -903,7 +903,11 @@ async function convAdds(adm){
   return n;
 }
 /* Mientras el fixture sea de ejemplo, los equipos inscriptos van ocupando el lugar de los equipos inventados. */
-const EX_SLOTS = {futbol:['CASI', 'Newman', 'Regatas', 'Hindú']};
+const EX_SLOTS = {
+  futbol:['CASI', 'Newman', 'Regatas', 'Hindú'],
+  rugby:['Tucumán Rugby', 'SIC', 'Los Tilos', 'Jockey Rosario', 'Córdoba Athletic', 'Pucará'],
+  hockey:["St. Catherine's", 'Banco Nación', 'Lomas', 'Belgrano AC', 'Ciudad', 'San Fernando', 'Mendoza RC', 'Hindú']
+};
 async function syncExample(){
   if (!S.ejemplo) return;
   try {
