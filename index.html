@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261113150112';
+const APP_V = '20261113174850';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -934,6 +934,41 @@ async function syncExample(){
     if (!error) { lastUpd = now; setBase(st); }
   } catch (e) {}
 }
+/* Renombrar un equipo: mueve su escudo y su nombre en grupos y partidos, así no se pierde nada. */
+function renameInState(st, oldN, newN){
+  let ch = false; const same = s => norm(s) === norm(oldN);
+  st.escudos = st.escudos || {};
+  Object.keys(st.escudos).forEach(k => { if (same(k)) { if (!st.escudos[newN]) st.escudos[newN] = st.escudos[k]; if (k !== newN) delete st.escudos[k]; ch = true; } });
+  st.comps.forEach(c => {
+    const had = c.grupos.some(g => g.equipos.some(same)); if (!had) return;
+    const dupe = c.grupos.some(g => g.equipos.some(e => norm(e) === norm(newN) && !same(e)));
+    if (dupe) {
+      const slots = (EX_SLOTS[c.id] || []).filter(x => !c.grupos.some(g => g.equipos.includes(x)));
+      const ph = slots[0] || 'Equipo a definir', isDupe = n => norm(n) === norm(newN) && !same(n);
+      c.grupos.forEach(g => { g.equipos = g.equipos.map(e => isDupe(e) ? ph : e); });
+      st.partidos.forEach(m => { if (m.c === c.id) { if (isDupe(m.l)) m.l = ph; if (isDupe(m.v)) m.v = ph; } });
+    }
+    c.grupos.forEach(g => { g.equipos = g.equipos.map(e => same(e) ? newN : e); });
+    st.partidos.forEach(m => { if (m.c === c.id) { if (same(m.l)) m.l = newN; if (same(m.v)) m.v = newN; } });
+    ch = true;
+  });
+  return ch;
+}
+async function renameTeam(oldN, newN){
+  try {
+    const {data:row} = await sb.from('tb_state').select('data').eq('id', 1).maybeSingle();
+    const st = clone(row && row.data ? row.data : BASE);
+    if (!renameInState(st, oldN, newN)) return;
+    const now = new Date().toISOString();
+    const {error} = await sb.from('tb_state').upsert({id:1, data:st, updated_at:now});
+    if (!error) { lastUpd = now; setBase(st); toast('Escudo y fixture actualizados con el nombre nuevo'); }
+  } catch (e) {}
+}
+async function fixJockeySJ(){
+  const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:'fix_jsj', data:{at:new Date().toISOString()}}); if (e0) return;
+  const ins = A.insc.find(i => /jockey/.test(norm(i.club)) && /(sj|sanjuan)/.test(norm(i.club)));
+  if (ins && norm(ins.club) !== norm('Jockey (San Juan)')) await renameTeam('Jockey (San Juan)', ins.club);
+}
 async function seedConv(){
   toast('Cargando clubes…');
   try {
@@ -1167,7 +1202,7 @@ function inscForm(x){
     {k:'pagado', label:'Pagó el total', type:'toggle', value:x.pagado},
     {k:'bonif', label:'Sin cargo (anfitrión o invitado)', type:'toggle', value:x.bonif},
     {k:'notas', label:'Notas', type:'textarea', value:x.notas, ph:'Alojamiento, horario de llegada…'}
-  ], onSave: v => { if (!v.club) { toast('Poné el nombre del club.'); return; } dbSave('insc', isNew ? null : x.id, Object.assign(v, {ejemplo:false})); },
+  ], onSave: async v => { if (!v.club) { toast('Poné el nombre del club.'); return; } const old = !isNew && x.club; await dbSave('insc', isNew ? null : x.id, Object.assign(v, {ejemplo:false})); if (old && old.trim() !== v.club.trim()) renameTeam(old, v.club.trim()); },
      onDelete: isNew ? null : () => dbDel('insc', x.id)});
 }
 function fiestaForm(x){
@@ -1361,7 +1396,7 @@ async function loadAdmin(){
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   if (A.conv.length && CONV_ADD.some(g => !adm[g.key])) convAdds(adm).then(n => { if (n) loadAdmin(); });
-  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); await syncExample(); });
+  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); if (!adm.fix_jsj) await fixJockeySJ(); await syncExample(); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
