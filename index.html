@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261113105356';
+const APP_V = '20261113105656';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -462,7 +462,7 @@ function genCrest(name){
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 46"><path d="M20 2 L37 7 V22 C37 33 29 40 20 44 C11 40 3 33 3 22 V7 Z" fill="${fill}" stroke="#F5C518" stroke-width="2.6" stroke-linejoin="round"/><path d="M9 10.5 H31" stroke="#5BB8F0" stroke-width="1.8"/>${txt}</svg>`;
   return (genCache[name] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
 }
-function crestFor(name, comp){ if (comp === 'futbol') return ''; const s = crestSrc(crestId(name)); if (s) return s; return comp === 'hockey' ? genCrest(name) : ''; }
+function crestFor(name, comp){ if (comp && comp !== 'rugby') return ''; return crestSrc(crestId(name)); }
 function crest(name, comp){ const s = crestFor(name, comp); return s ? `<img class="crest" src="${s}" alt="">` : ''; }
 function standings(c, g){
   const rows = {};
@@ -763,7 +763,7 @@ function admInsc(){
     return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${jug(items)} personas · ${$$(cobr)}</small></h2>
     ${c.id === 'rugby' || items.some(x => x.aloj && x.aloj !== 'No') ? `<div class="aloj-row">${['Piso 9', 'Comunitario'].map(k => { const it = items.filter(x => x.aloj === k); return `<span><b>${k}</b> <b class="num">${jug(it)}</b> personas · ${it.length} ${it.length === 1 ? 'equipo' : 'equipos'}</span>`; }).join('')}</div>` : ''}
     ${items.length ? `<div class="list">${items.map(x => {
-    const cs = crestFor(x.club, x.comp), noCrest = x.comp === 'futbol';
+    const cs = crestFor(x.club, x.comp), noCrest = x.comp !== 'rugby';
     return `<div class="li${noCrest ? '' : ' wc'}">${noCrest ? '' : `<button class="crest-btn" data-act="crest" data-id="${x.id}" aria-label="Escudo de ${esc(x.club)}">${cs ? `<img src="${cs}" alt="">` : '+'}</button>`}<button class="li-main" data-act="editinsc" data-id="${x.id}"><span class="li-t">${esc(x.club)}${exTag(x)}</span><span class="li-s">${[c ? c.nombre : x.comp, x.provincia, x.jugadores ? x.jugadores + ' jug.' : '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.contacto].filter(Boolean).map(esc).join(' · ')}</span></button>
     <div class="li-r"><span class="amt">${$$(x.monto)}</span><button class="pill ${payState(x)[0]}" data-act="pay" data-id="${x.id}">${payState(x)[1]}</button>${!x.pagado && !x.bonif && +x.sena > 0 ? `<span class="li-s num">Pagó ${$$(cobrado(x))} · <b style="color:var(--bad)">Resta ${$$(Math.max(0, (+x.monto || 0) - cobrado(x)))}</b></span>` : ''}</div></div>`;
     }).join('')}</div>` : '<div class="empty">Sin equipos inscriptos.</div>'}</section>`; }).join('') : '<div class="empty">Todavía no hay equipos inscriptos. Tocá <b>Inscribir equipo</b> para cargar el primero.</div>'}`;
