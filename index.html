@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261116180526';
+const APP_V = '20261116183649';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -918,6 +918,12 @@ async function syncExample(){
       const c = st.comps.find(x => x.id === cid); if (!c || !c.grupos.length) continue;
       const inGroups = () => c.grupos.flatMap(g => g.equipos);
       const regs = A.insc.filter(i => i.comp === cid && i.club).map(i => i.club);
+      /* sacar equipos que no están inscriptos en este deporte (quedaron de un cambio de nombre o de deporte) */
+      const seedC = (SEED.comps.find(x => x.id === cid) || {grupos:[]}), exNames = new Set(seedC.grupos.flatMap(g => g.equipos).concat(slots));
+      const ok = e => exNames.has(e) || regs.some(r => norm(r) === norm(e)) || (cid === 'rugby' && Object.keys(st.escudos || {}).some(k => norm(k) === norm(e)));
+      const seen = new Set();
+      c.grupos.forEach(g => { g.equipos = g.equipos.filter(e => { const k = norm(e); if (!ok(e) || seen.has(k)) { changed = true; return false; } seen.add(k); return true; }); });
+      st.partidos.forEach(m => { if (m.c !== cid || !m.g) return; ['l', 'v'].forEach(k => { if (!ok(m[k])) { const ph = slots.find(s => !inGroups().includes(s) && !st.partidos.some(p => p.c === cid && (p.l === s || p.v === s))) || slots[0]; const grp = c.grupos.find(g => g.id === m.g) || c.grupos[0]; if (!grp.equipos.includes(ph)) grp.equipos.push(ph); st.partidos.forEach(p => { if (p.c === cid) { if (p.l === m[k] && p !== m) p.l = ph; if (p.v === m[k] && p !== m) p.v = ph; } }); m[k] = ph; changed = true; } }); });
       for (const club of regs) {
         if (inGroups().some(e => norm(e) === norm(club))) continue;
         const free = slots.find(s => inGroups().includes(s) && !regs.some(r => norm(r) === norm(s)));
