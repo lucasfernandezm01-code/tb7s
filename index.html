@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261117121357';
+const APP_V = '20261117121532';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -786,7 +786,7 @@ function admConv(){
   return `<div class="toolbar" style="flex-wrap:nowrap;overflow-x:auto"><button class="chip" data-act="convz" data-id="todas" aria-pressed="${convZona === 'todas'}">Todas <span class="muted">${n}</span></button>${zonasAll.map(zchip).join('')}</div>
   <div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi"><span>Clubes</span><b class="num">${n}</b></div><div class="kpi"><span>Contact.</span><b class="num">${nc}</b></div><div class="kpi pos"><span>Confirm.</span><b class="num">${conf.length}</b></div><div class="kpi"><span>Jugad.</span><b class="num">${ni}</b></div></div>
   <div class="toolbar" style="flex-wrap:nowrap;overflow-x:auto">${pill('todos','Todos')}${pill('sin','Sin contactar')}${pill('cont','En charla')}${pill('conf','Confirmados')}${pill('no','No vienen')}</div>
-  <div class="toolbar"><button class="btn primary" data-act="newconv">+ Agregar club</button>${!A.conv.length ? '<button class="btn" data-act="seedconv">Cargar lista de clubes 2026</button>' : ''}<button class="btn ghost" data-act="csv" data-id="conv">Exportar CSV</button></div>
+  <div class="toolbar"><button class="btn primary" data-act="newconv">+ Agregar club</button>${!A.conv.length ? '<button class="btn" data-act="seedconv">Cargar lista de clubes 2026</button>' : ''}<button class="btn ghost" data-act="csv" data-id="conv">Exportar Excel</button></div>
   ${list.length ? zonas.map(z => { const it = list.filter(x => (x.zona || 'Otros') === z);
     return `<section class="stack"><h2 class="sec-title">${esc(z)}<small>${it.length}</small></h2><div class="list">${it.map(x => `<div class="li"><button class="li-main" data-act="editconv" data-id="${x.id}"><span class="li-t">${esc(x.club)}</span><span class="li-s">${[x.prov, x.integ ? x.integ + ' jug.' : '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.resp ? 'contacta ' + x.resp : '', x.com].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</span></button>
       <div class="li-r"><button class="pill ${x.cont ? 'mid' : 'no'}" data-act="convcont" data-id="${x.id}">${x.cont ? 'Contactado' : 'Sin contactar'}</button><button class="pill ${x.estado === 'Confirmado' ? 'ok' : x.estado === 'No viene' ? 'no' : 'mid'}" data-act="convest" data-id="${x.id}" ${x.estado === 'No viene' ? 'style="opacity:.6"' : ''}>${esc(x.estado || 'Pendiente')}</button>${x.estado === 'Confirmado' && !inEq(x) ? `<button class="pill ok" data-act="conv2eq" data-id="${x.id}">→ Pasar a Equipos</button>` : ''}</div></div>`).join('')}</div></section>`; }).join('')
@@ -1265,7 +1265,35 @@ function pickCrest(x){
   };
   inp.click();
 }
+function loadScript(src){ return new Promise((ok, ko) => { if (window.XLSX) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+async function exportConvXlsx(){
+  toast('Armando el Excel…');
+  try { await loadScript('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'); } catch (e) { toast('No se pudo armar el Excel. Probá de nuevo.'); return; }
+  const zi = z => { const i = ZONAS.indexOf(z || 'Otros'); return i < 0 ? 99 : i; };
+  const pi = p => /primera b/i.test(p || '') ? 0 : /primera c/i.test(p || '') ? 1 : /segunda/i.test(p || '') ? 2 : 3;
+  const rows = A.conv.filter(x => (x.dep || 'rugby') === 'rugby').slice().sort((a, b) => zi(a.zona) - zi(b.zona) || (a.zona === 'URBA resto' ? pi(a.prov) - pi(b.prov) : (a.prov || '').localeCompare(b.prov || '')) || (a.club || '').localeCompare(b.club || ''));
+  const head = ['Club', 'Zona', 'Provincia / torneo', 'Estado', 'Contactado', 'Integrantes', 'Alojamiento', 'Quién lo contacta', 'Contacto del club', 'Comentarios'];
+  const estado = x => x.estado === 'Confirmado' ? 'Confirmado' : x.estado === 'No viene' ? 'No viene' : x.cont ? 'En charla' : 'Sin contactar';
+  const FILL = {'Confirmado':'C6EFCE', 'En charla':'DDEBF7', 'No viene':'FFC7CE', 'Sin contactar':'EDEDED'};
+  const FONT = {'Confirmado':'006100', 'En charla':'1F4E79', 'No viene':'9C0006', 'Sin contactar':'595959'};
+  const data = [head].concat(rows.map(x => [x.club || '', x.zona || '', x.prov || '', estado(x), x.cont ? 'Sí' : 'No', x.integ || '', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.resp || '', x.tel || '', x.com || '']));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const border = {top:{style:'thin', color:{rgb:'D0D0D0'}}, bottom:{style:'thin', color:{rgb:'D0D0D0'}}, left:{style:'thin', color:{rgb:'D0D0D0'}}, right:{style:'thin', color:{rgb:'D0D0D0'}}};
+  head.forEach((h, c) => { const ref = XLSX.utils.encode_cell({r:0, c}); ws[ref].s = {font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'13254F'}}, alignment:{vertical:'center'}, border}; });
+  rows.forEach((x, i) => { const e = estado(x); head.forEach((h, c) => { const ref = XLSX.utils.encode_cell({r:i + 1, c}); if (!ws[ref]) ws[ref] = {t:'s', v:''}; ws[ref].s = {fill:{fgColor:{rgb:FILL[e]}}, font:{color:{rgb:FONT[e]}, bold:c === 0 || c === 3}, border, alignment:{vertical:'top', wrapText:c === 9}}; }); });
+  ws['!cols'] = [28, 14, 22, 14, 11, 11, 13, 18, 26, 40].map(w => ({wch:w}));
+  ws['!autofilter'] = {ref:XLSX.utils.encode_range({s:{r:0, c:0}, e:{r:rows.length, c:head.length - 1}})};
+  ws['!freeze'] = {xSplit:0, ySplit:1};
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Convocatoria');
+  const ref = XLSX.utils.aoa_to_sheet([['Color', 'Significa'], ['Verde', 'Confirmado'], ['Azul', 'Contactado / en charla'], ['Rojo', 'No viene'], ['Gris', 'Todavía no hablamos']]);
+  [['C6EFCE',1],['DDEBF7',2],['FFC7CE',3],['EDEDED',4]].forEach(([c, r]) => { ref[XLSX.utils.encode_cell({r, c:0})].s = {fill:{fgColor:{rgb:c}}}; });
+  ref['!cols'] = [{wch:10}, {wch:26}]; XLSX.utils.book_append_sheet(wb, ref, 'Referencias');
+  const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download = 'TB7s-convocatoria.xlsx';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
 async function exportCsv(key){
+  if (key === 'conv') return exportConvXlsx();
   const cols = {insc:['club','comp','provincia','contacto','tel','jugadores','aloj','monto','sena','pagado','notas'], fiesta:['fecha','nombre','cantidad','precio','medio','tanda','vendedor'], caja:['fecha','tipo','concepto','categoria','monto','medio','notas'], conv:['club','zona','prov','cont','estado','integ','aloj','resp','tel','com']}[key];
   const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
   let rows = A[key].slice();
