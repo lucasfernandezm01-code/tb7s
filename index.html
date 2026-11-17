@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261116183649';
+const APP_V = '20261117121357';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -1268,7 +1268,14 @@ function pickCrest(x){
 async function exportCsv(key){
   const cols = {insc:['club','comp','provincia','contacto','tel','jugadores','aloj','monto','sena','pagado','notas'], fiesta:['fecha','nombre','cantidad','precio','medio','tanda','vendedor'], caja:['fecha','tipo','concepto','categoria','monto','medio','notas'], conv:['club','zona','prov','cont','estado','integ','aloj','resp','tel','com']}[key];
   const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
-  const csv = '﻿' + cols.join(';') + '\n' + A[key].map(x => cols.map(c => q(x[c])).join(';')).join('\n');
+  let rows = A[key].slice();
+  if (key === 'conv') {
+    const zi = z => { const i = ZONAS.indexOf(z || 'Otros'); return i < 0 ? 99 : i; };
+    const pi = p => /primera b/i.test(p || '') ? 0 : /primera c/i.test(p || '') ? 1 : /segunda/i.test(p || '') ? 2 : 3;
+    rows.sort((a, b) => zi(a.zona) - zi(b.zona) || (a.zona === 'URBA resto' ? pi(a.prov) - pi(b.prov) : (a.prov || '').localeCompare(b.prov || '')) || (a.club || '').localeCompare(b.club || ''));
+    rows = rows.map(x => Object.assign({}, x, {cont:x.cont ? 'Sí' : 'No'}));
+  }
+  const csv = '﻿' + cols.join(';') + '\n' + rows.map(x => cols.map(c => q(x[c])).join(';')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'})); a.download = 'tb7s-' + key + '.csv';
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
