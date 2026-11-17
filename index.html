@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261117121532';
+const APP_V = '20261117121826';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -886,6 +886,19 @@ async function swapExample(key, oldName, match, fallback){
 }
 /* Altas en la convocatoria pedidas por Lucas: se aplican una vez. Si el club ya está, solo lo pasa a "en charla". */
 const CONV_ADD = [{key:'conv_add_1112', clubs:[{m:'campana', club:'Ciudad de Campana'}, {m:'lanus', club:'Lanús Rugby Club'}, {m:'loscedros', club:'Los Cedros'}]}];
+/* Cambios de estado pedidos por Lucas: se aplican una vez. */
+const CONV_SET = [{key:'conv_set_crai', m:'crai', estado:'Confirmado'}];
+async function convSets(adm){
+  let n = 0;
+  for (const c of CONV_SET.filter(c => !adm[c.key])) {
+    try {
+      const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:c.key, data:{at:new Date().toISOString()}}); if (e0) continue;
+      const rows = A.conv.filter(x => norm(x.club) === c.m || norm(x.club).startsWith(c.m)).map(x => { const d = Object.assign({}, x, {estado:c.estado, cont:true}); delete d.id; return {col:COL.conv, id:x.id, data:d}; });
+      if (rows.length && !(await sb.from('adm_docs').upsert(rows)).error) { n++; toast('Convocatoria: ' + rows.map(r => r.data.club).join(', ') + ' → ' + c.estado); }
+    } catch (e) {}
+  }
+  return n;
+}
 async function convAdds(adm){
   let n = 0;
   for (const g of CONV_ADD.filter(g => !adm[g.key])) {
@@ -1436,7 +1449,7 @@ async function loadAdmin(){
   A.prev = Object.assign({p1:0, p2:0, p3:0}, adm.preventas || {});
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
-  if (A.conv.length && CONV_ADD.some(g => !adm[g.key])) convAdds(adm).then(n => { if (n) loadAdmin(); });
+  if (A.conv.length && (CONV_ADD.some(g => !adm[g.key]) || CONV_SET.some(c => !adm[c.key]))) convAdds(adm).then(async n => { n += await convSets(adm); if (n) loadAdmin(); });
   installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); if (!adm.fix_jsj) await fixJockeySJ(); await syncExample(); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
