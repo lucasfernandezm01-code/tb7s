@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261117121826';
+const APP_V = '20261117122658';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -802,7 +802,7 @@ function convForm(x){
     {k:'aloj', label:'Alojamiento', type:'select', options:['No','Piso 9','Comunitario'], value:x.aloj || 'No', half:true}, {k:'resp', label:'Quién lo contacta', value:x.resp, half:true},
     {k:'tel', label:'Contacto del club (nombre y teléfono)', value:x.tel},
     {k:'com', label:'Comentarios', type:'textarea', value:x.com}
-  ], onSave: v => { if (!v.club) { toast('Poné el nombre del club.'); return; } dbSave('conv', isNew ? null : x.id, Object.assign({}, x, v, {dep:x.dep || convDep, id:undefined})); },
+  ], onSave: v => { if (!v.club) { toast('Poné el nombre del club.'); return; } const id = isNew ? newId('c') : x.id, d = Object.assign({}, x, v, {dep:x.dep || convDep}); delete d.id; dbSave('conv', id, d).then(() => syncConv(Object.assign({id}, d))); },
      onDelete: isNew ? null : () => dbDel('conv', x.id)});
 }
 /* Categorías URBA 2026 según el reglamento oficial (CAMPEONATO-2026-FINAL.pdf). Hindú queda fuera: es el anfitrión. */
@@ -996,11 +996,70 @@ async function seedConv(){
     await loadAdmin(); toast(rows.length + ' clubes cargados');
   } catch (e) { toast('No se pudo cargar la lista.'); }
 }
-async function conv2eq(x){
-  const comp = x.dep || 'rugby';
-  try { await db.collection(COL.insc).add({club:x.club, comp, provincia:x.prov || '', contacto:x.tel || '', tel:'', jugadores:x.integ || null, monto:A.cfg.precioInsc || 0, sena:null, aloj:x.aloj || 'No', pagado:false, bonif:false, notas:x.com || '', ejemplo:false}); toast(x.club + ' pasó a Equipos'); }
-  catch (e) { toast('No se pudo pasar a Equipos.'); }
+/* ===== Convocatoria ↔ Equipos (rugby) conectados ===== */
+const CLUB_AB = {sj:'san juan', sl:'san luis', mza:'mendoza', tuc:'tucuman', cba:'cordoba', ros:'rosario', lp:'la plata', mdp:'mar del plata', sf:'santa fe', bb:'bahia blanca'};
+const clubKey = s => norm(String(s || '').replace(/\(([^)]+)\)/g, (m, a) => ' ' + (CLUB_AB[norm(a)] || a) + ' ').replace(/\b(club|rugby|athletic|de|del|la|el|los|las)\b/gi, ' ').replace(/\b(r\.?c\.?|c\.?r\.?)$/i, ''));
+const looseClub = (a, b) => { const x = clubKey(a), y = clubKey(b); return !!x && !!y && (x === y || (Math.min(x.length, y.length) >= 5 && (x.startsWith(y) || y.startsWith(x)))); };
+const isHost = n => norm(n) === 'hindu' || norm(n).startsWith('hinduclub');
+const rugbyConv = () => A.conv.filter(c => (c.dep || 'rugby') === 'rugby');
+const rugbyInsc = () => A.insc.filter(i => i.comp === 'rugby' && !i.ejemplo);
+function uniq(list, name){ const ex = list.filter(x => norm(x.club) === norm(name)); if (ex.length) return ex[0]; const lo = list.filter(x => looseClub(x.club, name)); return lo.length === 1 ? lo[0] : null; }
+const convOf = i => (i.convId && A.conv.find(c => c.id === i.convId)) || uniq(rugbyConv(), i.club);
+const inscOf = c => A.insc.find(i => i.convId === c.id) || uniq(rugbyInsc().filter(i => !i.convId), c.club);
+const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const hasPay = i => i.pagado || +i.sena > 0;
+function guessZona(name){ const u = URBA_2026.find(u => [u.club].concat(u.al).some(n => looseClub(n, name))); return u ? {zona:u.zona, prov:u.prov} : {zona:'Interior', prov:''}; }
+/* Cambio en Convocatoria → Equipos */
+async function syncConv(c){
+  if (!db || (c.dep || 'rugby') !== 'rugby' || isHost(c.club)) return;
+  try {
+    const i = inscOf(c);
+    if (c.estado === 'Confirmado') {
+      if (!i) { await db.collection(COL.insc).doc(newId('i')).set({club:c.club, comp:'rugby', provincia:c.prov || '', contacto:c.tel || '', tel:'', jugadores:c.integ || null, monto:A.cfg.precioInsc || 0, sena:null, aloj:c.aloj || 'No', pagado:false, bonif:false, notas:c.com || '', ejemplo:false, convId:c.id}); toast(c.club + ' agregado a Equipos'); return; }
+      const d = strip(i); let ch = d.convId !== c.id; d.convId = c.id;
+      if (c.club && c.club.trim() !== i.club.trim()) { d.club = c.club.trim(); ch = true; renameTeam(i.club, d.club); }
+      if (c.integ != null && c.integ !== '' && +c.integ !== +i.jugadores) { d.jugadores = +c.integ; ch = true; }
+      if (c.aloj && c.aloj !== (i.aloj || 'No')) { d.aloj = c.aloj; ch = true; }
+      if (ch) await db.collection(COL.insc).doc(i.id).set(d);
+    } else if (i) {
+      if (hasPay(i)) toast(i.club + ' tiene pagos cargados en Equipos: no lo saqué. Si no viene, borralo a mano.');
+      else { await db.collection(COL.insc).doc(i.id).delete(); toast(i.club + ' salió de Equipos'); }
+    }
+  } catch (e) { toast('No se pudo actualizar Equipos.'); }
 }
+/* Cambio en Equipos → Convocatoria. Devuelve el id de la convocatoria vinculada. */
+async function syncInsc(v, old){
+  if (!db) return null;
+  try {
+    const wasR = old && old.comp === 'rugby' && !old.ejemplo, isR = v.comp === 'rugby' && !v.ejemplo;
+    if (!isR) { if (wasR) await unconfirmConv(old); return null; }
+    if (isHost(v.club)) return null;
+    const c = convOf(Object.assign({}, old || {}, v, {club:(old && old.club) || v.club})) || convOf(v);
+    const id = c ? c.id : newId('c'), z = guessZona(v.club);
+    const d = c ? strip(c) : {club:v.club, zona:z.zona, prov:z.prov || v.provincia || '', com:'', integ:null, aloj:'No', resp:'', tel:v.contacto || '', dep:'rugby'};
+    const was = c && c.estado;
+    Object.assign(d, {club:v.club.trim(), estado:'Confirmado', cont:true, aloj:v.aloj || d.aloj || 'No'});
+    if (v.jugadores != null && v.jugadores !== '') d.integ = +v.jugadores;
+    await db.collection(COL.conv).doc(id).set(d);
+    if (!c) toast(v.club + ' agregado a Convocatoria como Confirmado'); else if (was !== 'Confirmado') toast(d.club + ' → Confirmado en Convocatoria');
+    return id;
+  } catch (e) { toast('No se pudo actualizar Convocatoria.'); return null; }
+}
+async function unconfirmConv(i){
+  const c = (i.convId && A.conv.find(c => c.id === i.convId)) || rugbyConv().find(c => norm(c.club) === norm(i.club));
+  if (c && c.estado === 'Confirmado') { const d = strip(c); d.estado = 'Interesado'; await db.collection(COL.conv).doc(c.id).set(d); toast(c.club + ' volvió a "Interesado" en Convocatoria'); }
+}
+/* Una vez: vincula lo que ya estaba cargado en los dos lados. */
+async function syncAllOnce(adm){
+  if (adm.sync_conv_eq1 || !A.conv.length || syncAllOnce.busy) return 0;
+  syncAllOnce.busy = true;
+  const {error:e0} = await sb.from('adm_docs').insert({col:'adm', id:'sync_conv_eq1', data:{at:new Date().toISOString()}}); if (e0) return 0;
+  let n = 0;
+  for (const i of rugbyInsc().filter(i => !isHost(i.club))) { const id = await syncInsc(i, i); if (id && i.convId !== id) { const d = strip(i); d.convId = id; await db.collection(COL.insc).doc(i.id).set(d); i.convId = id; } n++; }
+  for (const c of rugbyConv().filter(c => c.estado === 'Confirmado' && !isHost(c.club))) { if (!inscOf(c)) { await syncConv(c); n++; } }
+  return n;
+}
+async function conv2eq(x){ await syncConv(Object.assign({}, x, {estado:'Confirmado'})); }
 let avDraft = {txt:'', tipo:'imp', dura:'3'};
 function admAvisos(){
   const act = avActivos(), old = (S.avisos || []).filter(a => !act.includes(a)).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 10);
@@ -1221,8 +1280,8 @@ function inscForm(x){
     {k:'pagado', label:'Pagó el total', type:'toggle', value:x.pagado},
     {k:'bonif', label:'Sin cargo (anfitrión o invitado)', type:'toggle', value:x.bonif},
     {k:'notas', label:'Notas', type:'textarea', value:x.notas, ph:'Alojamiento, horario de llegada…'}
-  ], onSave: async v => { if (!v.club) { toast('Poné el nombre del club.'); return; } const old = !isNew && x.club; await dbSave('insc', isNew ? null : x.id, Object.assign(v, {ejemplo:false})); if (old && old.trim() !== v.club.trim()) renameTeam(old, v.club.trim()); },
-     onDelete: isNew ? null : () => dbDel('insc', x.id)});
+  ], onSave: async v => { if (!v.club) { toast('Poné el nombre del club.'); return; } const old = !isNew && x.club; const d = Object.assign({}, isNew ? {} : {convId:x.convId}, v, {ejemplo:false}); const cid = await syncInsc(d, isNew ? null : x); if (cid) d.convId = cid; else delete d.convId; await dbSave('insc', isNew ? null : x.id, d); if (old && old.trim() !== v.club.trim()) renameTeam(old, v.club.trim()); },
+     onDelete: isNew ? null : async () => { await unconfirmConv(x).catch(() => {}); dbDel('insc', x.id); }});
 }
 function fiestaForm(x){
   const isNew = !x; x = x || {nombre:'', cantidad:1, precio:A.cfg.precioEntrada, medio:MEDIOS[0], tanda:'', vendedor:'', fecha:todayISO()};
@@ -1384,7 +1443,7 @@ document.addEventListener('click', e => {
   else if (a === 'editconv') convForm(A.conv.find(x => x.id === id));
   else if (a === 'seedconv') seedConv();
   else if (a === 'convcont') { const x = A.conv.find(y => y.id === id); if (x) db.collection(COL.conv).doc(id).update({cont:!x.cont}).catch(() => toast('No se pudo actualizar.')); }
-  else if (a === 'convest') { const x = A.conv.find(y => y.id === id); if (x) { const i = ESTADOS.indexOf(x.estado || 'Pendiente'); db.collection(COL.conv).doc(id).update({estado:ESTADOS[(i + 1) % ESTADOS.length], cont:true}).catch(() => toast('No se pudo actualizar.')); } }
+  else if (a === 'convest') { const x = A.conv.find(y => y.id === id); if (x) { const i = ESTADOS.indexOf(x.estado || 'Pendiente'); const est = ESTADOS[(i + 1) % ESTADOS.length]; db.collection(COL.conv).doc(id).update({estado:est, cont:true}).then(() => syncConv(Object.assign({}, x, {estado:est, cont:true}))).catch(() => toast('No se pudo actualizar.')); } }
   else if (a === 'conv2eq') { const x = A.conv.find(y => y.id === id); if (x) conv2eq(x); }
   else if (a === 'login') loginForm();
   else if (a === 'logout') { sb.auth.signOut(); toast('Sesión cerrada'); }
@@ -1449,7 +1508,7 @@ async function loadAdmin(){
   A.prev = Object.assign({p1:0, p2:0, p3:0}, adm.preventas || {});
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
-  if (A.conv.length && (CONV_ADD.some(g => !adm[g.key]) || CONV_SET.some(c => !adm[c.key]))) convAdds(adm).then(async n => { n += await convSets(adm); if (n) loadAdmin(); });
+  if (A.conv.length && (CONV_ADD.some(g => !adm[g.key]) || CONV_SET.some(c => !adm[c.key]) || !adm.sync_conv_eq1)) convAdds(adm).then(async n => { n += await convSets(adm); if (n) await loadAdmin(); n = await syncAllOnce(adm); if (n) { toast('Convocatoria y Equipos sincronizados'); loadAdmin(); } });
   installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); if (!adm.fix_jsj) await fixJockeySJ(); await syncExample(); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
