@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261117211909';
+const APP_V = '20261118083428';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -758,7 +758,7 @@ function admInsc(){
     <div class="kpis" style="grid-template-columns:repeat(${S.comps.length + 1},1fr)"><div class="kpi pos"><span>Total</span><b class="num">${total}</b></div>${S.comps.map(c => `<div class="kpi"><span>${esc(c.nombre.split(' ')[0])}</span><b class="num">${jug(list.filter(x => x.comp === c.id))}</b></div>`).join('')}</div>
     <div class="kpis" style="grid-template-columns:repeat(2,1fr)">${alojs.map(a => `<div class="kpi"><span>${a.k}</span><b class="num">${a.n}</b><span style="text-transform:none;letter-spacing:0;font-weight:500">${a.eq} ${a.eq === 1 ? 'equipo' : 'equipos'}</span></div>`).join('')}</div>
     ${sinDato ? `<p class="legend" style="margin:0">${sinDato} ${sinDato === 1 ? 'equipo no tiene' : 'equipos no tienen'} cargada la cantidad de jugadores: no suman al total.</p>` : ''}</div>` : '';
-  return `${resumen}<p class="legend" style="margin:0">Tocá el cuadradito de cada club para subir su escudo. Usá el mismo nombre del club en los grupos para que aparezca en fixture y tabla.</p><div class="toolbar"><button class="btn primary" data-act="newinsc">+ Inscribir equipo</button><button class="btn ghost" data-act="csv" data-id="insc">Exportar CSV</button></div>
+  return `${resumen}<p class="legend" style="margin:0">Tocá el cuadradito de cada club para subir su escudo. Usá el mismo nombre del club en los grupos para que aparezca en fixture y tabla.</p><div class="toolbar"><button class="btn primary" data-act="newinsc">+ Inscribir equipo</button><button class="btn ghost" data-act="csv" data-id="insc">Exportar Excel</button></div>
   ${list.length ? S.comps.map(c => { const items = list.filter(x => x.comp === c.id); const cobr = items.reduce((s, x) => s + cobrado(x), 0);
     return `<section class="stack"><h2 class="sec-title">${esc(c.nombre)}<small>${items.length} ${items.length === 1 ? 'equipo' : 'equipos'} · ${jug(items)} personas · ${$$(cobr)}</small></h2>
     ${c.id === 'rugby' || items.some(x => x.aloj && x.aloj !== 'No') ? `<div class="aloj-row">${['Piso 9', 'Comunitario'].map(k => { const it = items.filter(x => x.aloj === k); return `<span><b>${k}</b> <b class="num">${jug(it)}</b> personas · ${it.length} ${it.length === 1 ? 'equipo' : 'equipos'}</span>`; }).join('')}</div>` : ''}
@@ -1380,8 +1380,52 @@ async function exportConvXlsx(){
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download = 'TB7s-convocatoria.xlsx';
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
+async function exportInscXlsx(){
+  toast('Armando el Excel…');
+  try { await loadScript('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'); } catch (e) { toast('No se pudo armar el Excel. Probá de nuevo.'); return; }
+  const ci = id => { const i = S.comps.findIndex(c => c.id === id); return i < 0 ? 99 : i; };
+  const cname = id => (S.comps.find(c => c.id === id) || {}).nombre || id || '';
+  const rows = A.insc.filter(x => !x.ejemplo).slice().sort((a, b) => ci(a.comp) - ci(b.comp) || (a.club || '').localeCompare(b.club || ''));
+  const resta = x => x.bonif || x.pagado ? 0 : Math.max(0, (+x.monto || 0) - cobrado(x));
+  const est = x => payState(x)[1];
+  const head = ['Equipo', 'Deporte', 'Provincia / país', 'Personas', 'Alojamiento', 'Dónde', 'Encargado', 'Teléfono', 'Monto', 'Pagó', 'Resta pagar', 'Estado de pago', 'Notas'];
+  const data = [head].concat(rows.map(x => [x.club || '', cname(x.comp), x.provincia || '', +x.jugadores || '', x.aloj && x.aloj !== 'No' ? 'Sí' : 'No', x.aloj && x.aloj !== 'No' ? x.aloj : '', x.contacto || '', x.tel || '', x.bonif ? 0 : (+x.monto || 0), cobrado(x), resta(x), est(x), x.notas || '']));
+  const tot = r => rows.reduce((s, x) => s + r(x), 0);
+  data.push(['TOTAL', rows.length + ' equipos', '', tot(x => +x.jugadores || 0), rows.filter(x => x.aloj && x.aloj !== 'No').length + ' equipos', '', '', '', tot(x => x.bonif ? 0 : (+x.monto || 0)), tot(cobrado), tot(resta), '', '']);
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const B = {style:'thin', color:{rgb:'D0D0D0'}}, border = {top:B, bottom:B, left:B, right:B};
+  const FILL = {'Pagado':'C6EFCE', 'Sin cargo':'DDEBF7', 'Señado':'FFEB9C', 'Debe':'FFC7CE'}, FONT = {'Pagado':'006100', 'Sin cargo':'1F4E79', 'Señado':'9C5700', 'Debe':'9C0006'};
+  const MONEY = '"$"#,##0';
+  head.forEach((h, c) => { ws[XLSX.utils.encode_cell({r:0, c})].s = {font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'13254F'}}, alignment:{vertical:'center', horizontal:c >= 8 && c <= 10 ? 'right' : 'left'}, border}; });
+  for (let i = 1; i < data.length; i++) {
+    const last = i === data.length - 1, e = last ? null : est(rows[i - 1]);
+    head.forEach((h, c) => {
+      const ref = XLSX.utils.encode_cell({r:i, c}); if (!ws[ref]) ws[ref] = {t:'s', v:''};
+      if (c >= 8 && c <= 10 && ws[ref].t === 'n') ws[ref].z = MONEY;
+      ws[ref].s = last ? {font:{bold:true}, fill:{fgColor:{rgb:'FFF2CC'}}, border, numFmt:c >= 8 && c <= 10 ? MONEY : undefined}
+        : {fill:{fgColor:{rgb:c === 11 || c === 10 && resta(rows[i - 1]) > 0 ? FILL[e] : 'FFFFFF'}}, font:{color:{rgb:c === 11 || c === 10 && resta(rows[i - 1]) > 0 ? FONT[e] : '1A1A1A'}, bold:c === 0 || c === 11}, border, alignment:{vertical:'top', wrapText:c === 12}, numFmt:c >= 8 && c <= 10 ? MONEY : undefined};
+    });
+  }
+  ws['!cols'] = [26, 16, 18, 10, 12, 13, 20, 16, 12, 12, 13, 15, 44].map(w => ({wch:w}));
+  ws['!autofilter'] = {ref:XLSX.utils.encode_range({s:{r:0, c:0}, e:{r:rows.length, c:head.length - 1}})};
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Equipos');
+  const jug = arr => arr.reduce((s, x) => s + (+x.jugadores || 0), 0);
+  const res = [['Deporte', 'Equipos', 'Personas', 'Piso 9 (personas)', 'Comunitario (personas)', 'Cobrado', 'Resta cobrar']];
+  S.comps.concat([{id:null, nombre:'TOTAL'}]).forEach(c => { const it = c.id ? rows.filter(x => x.comp === c.id) : rows; res.push([c.nombre, it.length, jug(it), jug(it.filter(x => x.aloj === 'Piso 9')), jug(it.filter(x => x.aloj === 'Comunitario')), it.reduce((s, x) => s + cobrado(x), 0), it.reduce((s, x) => s + resta(x), 0)]); });
+  const rs = XLSX.utils.aoa_to_sheet(res);
+  res.forEach((r, i) => r.forEach((v, c) => { const ref = XLSX.utils.encode_cell({r:i, c}); if (c >= 5 && i) rs[ref].z = MONEY;
+    rs[ref].s = i === 0 ? {font:{bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'13254F'}}, border} : {font:{bold:i === res.length - 1 || c === 0}, fill:{fgColor:{rgb:i === res.length - 1 ? 'FFF2CC' : 'FFFFFF'}}, border, numFmt:c >= 5 ? MONEY : undefined}; }));
+  rs['!cols'] = [18, 10, 10, 17, 22, 14, 14].map(w => ({wch:w})); XLSX.utils.book_append_sheet(wb, rs, 'Resumen');
+  const ref = XLSX.utils.aoa_to_sheet([['Color', 'Significa'], ['Verde', 'Pagó todo'], ['Amarillo', 'Señado (resta pagar)'], ['Rojo', 'No pagó nada'], ['Azul', 'Sin cargo']]);
+  [['C6EFCE',1],['FFEB9C',2],['FFC7CE',3],['DDEBF7',4]].forEach(([c, r]) => { ref[XLSX.utils.encode_cell({r, c:0})].s = {fill:{fgColor:{rgb:c}}}; });
+  ref['!cols'] = [{wch:10}, {wch:24}]; XLSX.utils.book_append_sheet(wb, ref, 'Referencias');
+  const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download = 'TB7s-equipos.xlsx';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
 async function exportCsv(key){
   if (key === 'conv') return exportConvXlsx();
+  if (key === 'insc') return exportInscXlsx();
   const cols = {insc:['club','comp','provincia','contacto','tel','jugadores','aloj','monto','sena','pagado','notas'], fiesta:['fecha','nombre','cantidad','precio','medio','tanda','vendedor'], caja:['fecha','tipo','concepto','categoria','monto','medio','notas'], conv:['club','zona','prov','cont','estado','integ','aloj','resp','tel','com']}[key];
   const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
   let rows = A[key].slice();
