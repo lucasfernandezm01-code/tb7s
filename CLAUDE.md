@@ -9,3 +9,5 @@ Sitio del evento (Hindú Club, 12/12/2026): Rugby 7s, Hockey Mixto y Fútbol Fem
 - `SEED` en `index.html` es el estado inicial: si la tabla está vacía, el primer admin que entra lo sube.
 - Nunca subir al repo datos privados (teléfonos, montos): van solo en la base.
 - Versión: en cada cambio de `index.html` actualizar `APP_V` (arriba del script) y `version.json` con el mismo valor (AAAAMMDDHHMMSS). La app compara y se recarga sola cuando hay versión nueva.
+
+- Dominio: https://torcuatobeachseven.com (DNS en DonWeb: 4 A a 185.199.108-111.153 + CNAME www → lucasfernandezm01-code.github.io; Custom domain en Settings → Pages; Supabase Site URL y Redirect URL apuntan al dominio).
