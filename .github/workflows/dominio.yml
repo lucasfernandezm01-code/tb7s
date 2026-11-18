@@ -1,0 +1,23 @@
+name: dominio
+on:
+  push:
+    paths: ['.github/workflows/dominio.yml']
+permissions:
+  pages: write
+  contents: read
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - name: DNS
+        run: |
+          dig +short torcuatobeachseven.com A
+          echo '-- www'; dig +short www.torcuatobeachseven.com
+          echo '-- NS'; dig +short NS torcuatobeachseven.com
+      - name: Dominio en Pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X PUT repos/${{ github.repository }}/pages -f cname=torcuatobeachseven.com || true
+          gh api repos/${{ github.repository }}/pages || true
+          gh api repos/${{ github.repository }}/pages/health || true
