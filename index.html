@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261118083428';
+const APP_V = '20261120120725';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -1354,6 +1354,17 @@ function pickCrest(x){
   inp.click();
 }
 function loadScript(src){ return new Promise((ok, ko) => { if (window.XLSX) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+/* En el celular abre el menú de compartir: elegís Sheets, Numbers, Excel o "Guardar en Archivos". En la compu descarga directo. */
+async function saveXlsx(out, name){
+  const type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', blob = new Blob([out], {type});
+  const mobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (mobile && navigator.canShare) {
+    try { const f = new File([blob], name, {type}); if (navigator.canShare({files:[f]})) { await navigator.share({files:[f], title:name}); return; } }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
 async function exportConvXlsx(){
   toast('Armando el Excel…');
   try { await loadScript('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js'); } catch (e) { toast('No se pudo armar el Excel. Probá de nuevo.'); return; }
@@ -1377,8 +1388,7 @@ async function exportConvXlsx(){
   [['C6EFCE',1],['DDEBF7',2],['FFC7CE',3],['EDEDED',4]].forEach(([c, r]) => { ref[XLSX.utils.encode_cell({r, c:0})].s = {fill:{fgColor:{rgb:c}}}; });
   ref['!cols'] = [{wch:10}, {wch:26}]; XLSX.utils.book_append_sheet(wb, ref, 'Referencias');
   const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download = 'TB7s-convocatoria.xlsx';
-  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  saveXlsx(out, 'TB7s-convocatoria.xlsx');
 }
 async function exportInscXlsx(){
   toast('Armando el Excel…');
@@ -1420,8 +1430,7 @@ async function exportInscXlsx(){
   [['C6EFCE',1],['FFEB9C',2],['FFC7CE',3],['DDEBF7',4]].forEach(([c, r]) => { ref[XLSX.utils.encode_cell({r, c:0})].s = {fill:{fgColor:{rgb:c}}}; });
   ref['!cols'] = [{wch:10}, {wch:24}]; XLSX.utils.book_append_sheet(wb, ref, 'Referencias');
   const out = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})); a.download = 'TB7s-equipos.xlsx';
-  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  saveXlsx(out, 'TB7s-equipos.xlsx');
 }
 async function exportCsv(key){
   if (key === 'conv') return exportConvXlsx();
@@ -1556,6 +1565,7 @@ function makeDb(){
 }
 let ADM = {};
 async function loadAdmin(){
+  loadScript('https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js').catch(() => {});
   if (!sb || !isAdmin) return;
   const {data, error} = await sb.from('adm_docs').select('col,id,data');
   if (error) { dbState = 'off'; render(); return; }
