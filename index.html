@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261120120725';
+const APP_V = '20261125133627';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -727,12 +727,13 @@ function admResumen(){
   const t = totals(), saldo = t.ing - t.egr, cap = +A.cfg.capacidad || 0;
   const pct = cap ? Math.min(100, t.fq / cap * 100) : 0;
   const nPag = A.insc.filter(x => x.pagado || x.bonif).length;
-  const outs = {}; A.caja.filter(x => x.tipo === 'Egreso').forEach(x => outs[x.categoria || 'Otros egresos'] = (outs[x.categoria || 'Otros egresos'] || 0) + (+x.monto || 0));
-  const ins = {'Inscripciones': t.ip, 'Entradas fiesta': t.fi}; A.caja.filter(x => x.tipo === 'Ingreso').forEach(x => ins[x.categoria || 'Otros ingresos'] = (ins[x.categoria || 'Otros ingresos'] || 0) + (+x.monto || 0));
+  const byTitle = (tipo, map) => { const keys = {}; Object.keys(map).forEach(k => keys[norm(k)] = k); A.caja.filter(x => x.tipo === tipo).forEach(x => { const n = (x.concepto || '').trim() || (tipo === 'Ingreso' ? 'Otros ingresos' : 'Otros egresos'), k = keys[norm(n)] || (keys[norm(n)] = n); map[k] = (map[k] || 0) + (+x.monto || 0); }); return map; };
+  const outs = byTitle('Egreso', {});
+  const ins = byTitle('Ingreso', {'Inscripciones': t.ip, 'Entradas fiesta': t.fi});
   const hasEx = ['insc','fiesta','caja'].some(k => A[k].some(x => x.ejemplo));
   return `<div class="kpis"><div class="kpi pos"><span>Ingresos</span><b class="num">${$$(t.ing)}</b></div><div class="kpi neg"><span>Egresos</span><b class="num">${$$(t.egr)}</b></div><div class="kpi ${saldo >= 0 ? 'pos' : 'neg'}"><span>Saldo</span><b class="num">${$$(saldo)}</b></div></div>
   <div class="panel-card"><h2 class="sec-title">Ingresos por origen</h2>${barList(ins)}</div>
-  <div class="panel-card"><h2 class="sec-title">Egresos por rubro</h2>${barList(outs)}</div>
+  <div class="panel-card"><h2 class="sec-title">Egresos</h2>${barList(outs)}</div>
   <div class="panel-card"><h2 class="sec-title">Equipos<small>${nPag} de ${A.insc.length} pagaron</small></h2>
     <div class="row2"><span>Cobrado</span><b>${$$(t.ip)}</b></div><div class="row2"><span>Pendiente de cobro</span><b style="color:var(--bad)">${$$(t.ipend)}</b></div>
     ${S.comps.map(c => { const n = A.insc.filter(x => x.comp === c.id).length; return `<div class="row2"><span class="muted">${esc(c.nombre)}</span><b>${n} equipos</b></div>`; }).join('')}
@@ -1123,7 +1124,7 @@ function admCaja(){
   return `<div class="kpis"><div class="kpi pos"><span>Ingresos</span><b class="num">${$$(t.mi)}</b></div><div class="kpi neg"><span>Egresos</span><b class="num">${$$(t.mo)}</b></div><div class="kpi ${t.mi - t.mo >= 0 ? 'pos' : 'neg'}"><span>Neto</span><b class="num">${$$(t.mi - t.mo)}</b></div></div>
   <p class="legend" style="margin:0">Acá van sponsors, buffet, proveedores y gastos. Inscripciones y entradas se suman solas en el Resumen.</p>
   <div class="toolbar"><button class="btn primary" data-act="newcaja" data-id="Egreso">+ Egreso</button><button class="btn primary" data-act="newcaja" data-id="Ingreso" style="background:var(--good);border-color:var(--good)">+ Ingreso</button><button class="btn ghost" data-act="csv" data-id="caja">Exportar CSV</button></div>
-  ${list.length ? `<div class="list">${list.map(x => `<div class="li"><button class="li-main" data-act="editcaja" data-id="${x.id}"><span class="li-t">${esc(x.concepto)}${exTag(x)}</span><span class="li-s">${esc(x.categoria)} · ${esc(x.medio)}</span></button><div class="li-r"><span class="amt ${x.tipo === 'Ingreso' ? 'in' : 'out'}">${x.tipo === 'Ingreso' ? '+' : '−'}${$$(x.monto)}</span><span class="li-s">${esc(fmtDate(x.fecha))}</span></div></div>`).join('')}</div>` : '<div class="empty">Sin movimientos. Cargá el primer ingreso o egreso.</div>'}`;
+  ${list.length ? `<div class="list">${list.map(x => `<div class="li"><button class="li-main" data-act="editcaja" data-id="${x.id}"><span class="li-t">${esc(x.concepto)}${exTag(x)}</span><span class="li-s">${[x.medio, x.notas].filter(Boolean).map(esc).join(' · ')}</span></button><div class="li-r"><span class="amt ${x.tipo === 'Ingreso' ? 'in' : 'out'}">${x.tipo === 'Ingreso' ? '+' : '−'}${$$(x.monto)}</span><span class="li-s">${esc(fmtDate(x.fecha))}</span></div></div>`).join('')}</div>` : '<div class="empty">Sin movimientos. Cargá el primer ingreso o egreso.</div>'}`;
 }
 const fmtDate = s => s ? new Date(s + 'T12:00:00').toLocaleDateString('es-AR', {day:'numeric', month:'short'}) : '';
 
@@ -1310,14 +1311,13 @@ function fiestaForm(x){
      onDelete: isNew ? null : () => dbDel('fiesta', x.id)});
 }
 function cajaForm(x, tipo){
-  const isNew = !x; x = x || {tipo, concepto:'', categoria:(tipo === 'Ingreso' ? CATS_IN : CATS_OUT)[0], monto:null, fecha:todayISO(), medio:MEDIOS[0], notas:''};
+  const isNew = !x; x = x || {tipo, concepto:'', monto:null, fecha:todayISO(), medio:MEDIOS[0], notas:''};
   openForm({title: (isNew ? 'Nuevo ' : 'Editar ') + x.tipo.toLowerCase(), fields:[
     {k:'tipo', label:'Tipo', type:'select', options:['Egreso','Ingreso'], value:x.tipo, half:true}, {k:'monto', label:'Monto ($)', type:'number', value:x.monto, half:true},
-    {k:'concepto', label:'Concepto', value:x.concepto, ph:x.tipo === 'Ingreso' ? 'Sponsor principal' : 'Alquiler de sonido'},
-    {k:'categoria', label:'Rubro', type:'select', options:CATS_IN.concat(CATS_OUT), value:x.categoria},
+    {k:'concepto', label:'Título', value:x.concepto, ph:x.tipo === 'Ingreso' ? 'Ej: Sponsor Quilmes' : 'Ej: Ambulancia'},
     {k:'medio', label:'Medio', type:'select', options:MEDIOS, value:x.medio, half:true}, {k:'fecha', label:'Fecha', type:'date', value:x.fecha, half:true},
     {k:'notas', label:'Notas', type:'textarea', value:x.notas}
-  ], onSave: v => { if (!v.concepto || !v.monto) { toast('Completá concepto y monto.'); return; } dbSave('caja', isNew ? null : x.id, Object.assign(v, {ejemplo:false})); },
+  ], onSave: v => { if (!v.concepto || !v.monto) { toast('Completá título y monto.'); return; } v.concepto = v.concepto.trim(); dbSave('caja', isNew ? null : x.id, Object.assign(v, {ejemplo:false})); },
      onDelete: isNew ? null : () => dbDel('caja', x.id)});
 }
 function equipoForm(){
@@ -1435,7 +1435,7 @@ async function exportInscXlsx(){
 async function exportCsv(key){
   if (key === 'conv') return exportConvXlsx();
   if (key === 'insc') return exportInscXlsx();
-  const cols = {insc:['club','comp','provincia','contacto','tel','jugadores','aloj','monto','sena','pagado','notas'], fiesta:['fecha','nombre','cantidad','precio','medio','tanda','vendedor'], caja:['fecha','tipo','concepto','categoria','monto','medio','notas'], conv:['club','zona','prov','cont','estado','integ','aloj','resp','tel','com']}[key];
+  const cols = {insc:['club','comp','provincia','contacto','tel','jugadores','aloj','monto','sena','pagado','notas'], fiesta:['fecha','nombre','cantidad','precio','medio','tanda','vendedor'], caja:['fecha','tipo','concepto','monto','medio','notas'], conv:['club','zona','prov','cont','estado','integ','aloj','resp','tel','com']}[key];
   const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
   let rows = A[key].slice();
   if (key === 'conv') {
