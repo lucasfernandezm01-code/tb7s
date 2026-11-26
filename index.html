@@ -362,7 +362,7 @@ form{display:grid;gap:12px}
 <script>
 (function(){
 "use strict";
-const APP_V = '20261126185747';
+const APP_V = '20261126190106';
 async function checkVersion(){
   try {
     const r = await fetch('version.json?t=' + Date.now(), {cache:'no-store'}); if (!r.ok) return;
@@ -910,6 +910,24 @@ async function dropUniMza(){
     if (!error) { lastUpd = now; setBase(st); toast(old + ' salió del fixture · entra ' + NEW); }
   } catch (e) {}
 }
+/* Segunda pasada: saca a Universitario de Mendoza del fixture aunque ya no haya lugar para reemplazarlo. */
+async function dropUniMza2(){
+  try {
+    const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:'drop_umza2', data:{at:new Date().toISOString()}}); if (e0) return;
+    const isU = n => { const k = norm(n); return k.includes('mendoza') && (k.startsWith('universitario') || k.startsWith('uni')); };
+    for (const c of rugbyConv().filter(c => isU(c.club) && c.estado !== 'No viene')) { const d = strip(c); d.estado = 'No viene'; d.cont = true; await db.collection(COL.conv).doc(c.id).set(d); await syncConv(Object.assign({id:c.id}, d)); }
+    for (const i of rugbyInsc().filter(i => isU(i.club))) { if (hasPay(i)) toast(i.club + ' tiene pagos cargados en Equipos: no lo borré.'); else await db.collection(COL.insc).doc(i.id).delete(); }
+    const {data:row} = await sb.from('tb_state').select('data').eq('id', 1).maybeSingle();
+    const st = clone(row && row.data ? row.data : BASE), c = st.comps.find(c => c.id === 'rugby'); if (!c) return;
+    if (!c.grupos.some(g => g.equipos.some(isU))) return;
+    c.grupos.forEach(g => { g.equipos = g.equipos.filter(e => !isU(e)); });
+    st.partidos = st.partidos.filter(m => !(m.c === 'rugby' && (isU(m.l) || isU(m.v))));
+    Object.keys(st.escudos || {}).filter(isU).forEach(k => delete st.escudos[k]);
+    const now = new Date().toISOString();
+    const {error} = await sb.from('tb_state').upsert({id:1, data:st, updated_at:now});
+    if (!error) { lastUpd = now; setBase(st); toast('Universitario de Mendoza salió del fixture y la tabla'); }
+  } catch (e) { console.warn(e); }
+}
 async function swapExample(key, oldName, match, fallback){
   try {
     const {error:e0} = await sb.from('adm_docs').upsert({col:'adm', id:key, data:{at:new Date().toISOString()}}); if (e0) return;
@@ -960,6 +978,8 @@ const EX_SLOTS = {
   rugby:['Tucumán Rugby', 'SIC', 'Los Tilos', 'Jockey Rosario', 'Córdoba Athletic', 'Pucará'],
   hockey:["St. Catherine's", 'Banco Nación', 'Lomas', 'Belgrano AC', 'Ciudad', 'San Fernando', 'Mendoza RC', 'Hindú']
 };
+/* Clubes que se bajaron: no vuelven al fixture de ejemplo. */
+const DROPPED = ['universitariomendoza', 'unimendoza'];
 async function syncExample(){
   if (!S.ejemplo) return;
   try {
@@ -972,7 +992,7 @@ async function syncExample(){
       const regs = A.insc.filter(i => i.comp === cid && i.club).map(i => i.club);
       /* sacar equipos que no están inscriptos en este deporte (quedaron de un cambio de nombre o de deporte) */
       const seedC = (SEED.comps.find(x => x.id === cid) || {grupos:[]}), exNames = new Set(seedC.grupos.flatMap(g => g.equipos).concat(slots));
-      const ok = e => exNames.has(e) || regs.some(r => norm(r) === norm(e)) || (cid === 'rugby' && Object.keys(st.escudos || {}).some(k => norm(k) === norm(e)));
+      const ok = e => !DROPPED.some(d => norm(e).includes(d)) && (exNames.has(e) || regs.some(r => norm(r) === norm(e)) || (cid === 'rugby' && Object.keys(st.escudos || {}).some(k => norm(k) === norm(e))));
       const seen = new Set();
       c.grupos.forEach(g => { g.equipos = g.equipos.filter(e => { const k = norm(e); if (!ok(e) || seen.has(k)) { changed = true; return false; } seen.add(k); return true; }); });
       st.partidos.forEach(m => { if (m.c !== cid || !m.g) return; ['l', 'v'].forEach(k => { if (!ok(m[k])) { const ph = slots.find(s => !inGroups().includes(s) && !st.partidos.some(p => p.c === cid && (p.l === s || p.v === s))) || slots[0]; const grp = c.grupos.find(g => g.id === m.g) || c.grupos[0]; if (!grp.equipos.includes(ph)) grp.equipos.push(ph); st.partidos.forEach(p => { if (p.c === cid) { if (p.l === m[k] && p !== m) p.l = ph; if (p.v === m[k] && p !== m) p.v = ph; } }); m[k] = ph; changed = true; } }); });
@@ -1601,7 +1621,7 @@ async function loadAdmin(){
   const r2 = await sb.from('admins').select('email').order('email'); admins = (r2.data || []).map(x => x.email);
   dbState = 'on'; render();
   if (A.conv.length && (CONV_ADD.some(g => !adm[g.key]) || CONV_SET.some(c => !adm[c.key]) || !adm.sync_conv_eq1)) convAdds(adm).then(async n => { n += await convSets(adm); if (n) await loadAdmin(); n = await syncAllOnce(adm); if (n) { toast('Convocatoria y Equipos sincronizados'); loadAdmin(); } });
-  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); if (!adm.fix_jsj) await fixJockeySJ(); if (!adm.drop_umza) await dropUniMza(); else if (!adm.ej_estp) await swapAny('ej_estp', ['Tucumán Rugby', 'SIC', 'Los Tilos', 'Jockey Rosario', 'Córdoba Athletic', 'Pucará'], 'estudiantesp', 'Estudiantes (P)'); if (!adm.ej_curne) await swapAny('ej_curne', ['Tucumán Rugby', 'SIC', 'Los Tilos', 'Jockey Rosario', 'Córdoba Athletic', 'Pucará'], 'curne', 'CURNE'); await syncExample(); });
+  installCrests(adm).then(async () => { if (!adm.ej_arand2) await swapExample('ej_arand2', 'Jockey Rosario', 'aranduroga', 'Aranduroga'); if (!adm.ej_bmza2) await swapExample('ej_bmza2', 'Córdoba Athletic', 'bancomendoza', 'Banco Mendoza'); if (!adm.ej_pb) await swapExample('ej_pb', 'Pucará', 'palermobajo', 'Palermo Bajo'); if (!adm.fix_jsj) await fixJockeySJ(); if (!adm.drop_umza) await dropUniMza(); if (!adm.drop_umza2) await dropUniMza2(); if (adm.drop_umza) if (!adm.ej_estp) await swapAny('ej_estp', ['Tucumán Rugby', 'SIC', 'Los Tilos', 'Jockey Rosario', 'Córdoba Athletic', 'Pucará'], 'estudiantesp', 'Estudiantes (P)'); if (!adm.ej_curne) await swapAny('ej_curne', ['Tucumán Rugby', 'SIC', 'Los Tilos', 'Jockey Rosario', 'Córdoba Athletic', 'Pucará'], 'curne', 'CURNE'); await syncExample(); });
   if (!adm.fix_arand) fixArand();
   else if (!adm.fix_avclean) sb.from('adm_docs').upsert({col:'adm', id:'fix_avclean', data:{at:new Date().toISOString()}}).then(r => { if (!r.error && (S.avisos || []).some(x => x.at < '2026-10-27T02:30:00Z')) avSave(list => list.filter(x => x.at >= '2026-10-27T02:30:00Z'), 'Avisos de prueba borrados'); });
   if (A.conv.length && !adm.convfix_urba2026) fixUrba2026();
