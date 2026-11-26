@@ -1,0 +1,19 @@
+name: diag
+on:
+  push:
+    paths: ['.github/workflows/diag.yml']
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          K=$(grep -o "sb_publishable_[A-Za-z0-9_-]*" <(curl -s https://raw.githubusercontent.com/${{ github.repository }}/main/index.html) | head -1)
+          curl -s "https://vemvjxozfchaitlmlypb.supabase.co/rest/v1/tb_state?id=eq.1&select=updated_at,data" -H "apikey: $K" -H "Authorization: Bearer $K" > s.json
+          python3 -c "
+          import json;d=json.load(open('s.json'))[0];print('upd',d['updated_at'])
+          s=d['data']
+          for c in s['comps']:
+            if c['id']=='rugby': print([g['equipos'] for g in c['grupos']])
+          print(sorted(s.get('escudos',{}).keys()))
+          print(sorted({m['l'] for m in s['partidos'] if m['c']=='rugby'}|{m['v'] for m in s['partidos'] if m['c']=='rugby'}))
+          "
